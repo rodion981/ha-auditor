@@ -1,0 +1,22 @@
+run_audit:
+  name: Запустити аудит кастомних компонентів
+  description: Перевіряє нові GitHub-релізи компонентів, які встановлені через HACS.
+  fields:
+    mode:
+      name: Режим
+      description: Daily перевіряє чергову частину списку, full — максимально можливу кількість, digest також надсилає підсумок.
+      required: false
+      default: full
+      selector:
+        select:
+          options:
+            - daily
+            - full
+            - digest
+    notify:
+      name: Надіслати повідомлення
+      description: Надіслати результат через налаштований notification service.
+      required: false
+      default: true
+      selector:
+        boolean:
