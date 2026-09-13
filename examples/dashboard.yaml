@@ -1,0 +1,30 @@
+type: vertical-stack
+cards:
+  - type: markdown
+    content: |
+      {% set entity = 'sensor.custom_components_auditor' %}
+      {% set status = state_attr(entity, 'status') %}
+      {% set checked = state_attr(entity, 'checked_this_run') | int(0) %}
+      {% set targeted = state_attr(entity, 'targeted_this_run') | int(0) %}
+      {% set updates = state_attr(entity, 'available_updates') or [] %}
+      ## HACS release audit
+      Status: **{{ status or 'not run' }}**<br>
+      Checked: **{{ checked }}/{{ targeted }}**
+
+      {% if updates %}
+      ### Available updates
+      {% for item in updates[:10] %}
+      - **{{ item.component }}:** `{{ item.installed_version or '?' }}` → `{{ item.latest_version or '?' }}`{% if item.url %} · [release notes]({{ item.url }}){% endif %}
+      {% endfor %}
+      {% else %}
+      No HACS updates are currently reported.
+      {% endif %}
+  - type: button
+    name: Run full audit
+    icon: mdi:puzzle-check-outline
+    tap_action:
+      action: perform-action
+      perform_action: custom_components_auditor.run_audit
+      data:
+        mode: full
+        notify: false
