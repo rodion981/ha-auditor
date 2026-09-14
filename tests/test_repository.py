@@ -29,6 +29,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
     assert manifest["version"] == "1.1.0"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
+    assert manifest["config_flow"] is True
     assert manifest["codeowners"] == ["@rodion981"]
     assert manifest["documentation"] == "https://github.com/rodion981/ha-auditor"
     assert manifest["issue_tracker"] == (
@@ -50,6 +51,51 @@ def test_bilingual_readme_links_are_present() -> None:
     assert "README.md" in ukrainian
     assert "## Installation" in english
     assert "## Встановлення" in ukrainian
+    assert "Devices & services" in english
+    assert "Пристрої та служби" in ukrainian
+    assert "YAML-configured" not in english
+    assert "YAML-інтеграція" not in ukrainian
+
+
+def test_config_flow_has_bilingual_translations() -> None:
+    strings = json.loads((INTEGRATION / "strings.json").read_text(encoding="utf-8"))
+    english = json.loads(
+        (INTEGRATION / "translations" / "en.json").read_text(encoding="utf-8")
+    )
+    ukrainian = json.loads(
+        (INTEGRATION / "translations" / "uk.json").read_text(encoding="utf-8")
+    )
+
+    for translation in (strings, english, ukrainian):
+        assert set(translation) == {
+            "title",
+            "config",
+            "options",
+            "services",
+            "selector",
+        }
+        assert "user" in translation["config"]["step"]
+        assert "init" in translation["options"]["step"]
+        assert set(translation["services"]["run_audit"]["fields"]) == {
+            "mode",
+            "notify",
+        }
+        assert set(translation["selector"]["audit_mode"]["options"]) == {
+            "daily",
+            "full",
+            "digest",
+        }
+        assert set(translation["selector"]["weekday"]["options"]) == {
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+        }
+
+    assert strings == english
 
 
 def test_mit_license_is_present() -> None:
@@ -66,6 +112,18 @@ def test_services_yaml_is_valid() -> None:
 
     assert "run_audit" in services
     assert set(services["run_audit"]["fields"]) == {"mode", "notify"}
+    assert (
+        services["run_audit"]["fields"]["mode"]["selector"]["select"][
+            "translation_key"
+        ]
+        == "audit_mode"
+    )
+
+
+def test_service_icon_is_present() -> None:
+    icons = json.loads((INTEGRATION / "icons.json").read_text(encoding="utf-8"))
+
+    assert icons["services"]["run_audit"]["service"] == "mdi:refresh"
 
 
 @pytest.mark.parametrize(
