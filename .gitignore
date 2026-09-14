@@ -10,6 +10,6 @@ venv/
 # Home Assistant runtime and private configuration
 .storage/
 secrets.yaml
-configuration.yaml
+/configuration.yaml
 home-assistant_v2.db*
 *.log
