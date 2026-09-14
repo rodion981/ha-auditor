@@ -53,8 +53,10 @@ def test_bilingual_readme_links_are_present() -> None:
     assert "## Встановлення" in ukrainian
     assert "Devices & services" in english
     assert "Пристрої та служби" in ukrainian
-    assert "YAML-configured" not in english
-    assert "YAML-інтеграція" not in ukrainian
+    assert "migration" not in english.lower()
+    assert "міграц" not in ukrainian.lower()
+    assert "examples/configuration.yaml" not in english
+    assert "examples/configuration.yaml" not in ukrainian
 
 
 def test_config_flow_has_bilingual_translations() -> None:
@@ -130,7 +132,6 @@ def test_service_icon_is_present() -> None:
     "relative_path",
     [
         ".github/workflows/validate.yml",
-        "examples/configuration.yaml",
         "examples/dashboard.yaml",
     ],
 )
