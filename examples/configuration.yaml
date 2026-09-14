@@ -1,5 +1,6 @@
-# Keep the token in secrets.yaml. The integration also works without a token,
-# but checks only max_requests_per_run repositories per run.
+# Legacy migration example only. New installations are configured from
+# Settings > Devices & services > Add integration > HA Auditor.
+# Existing YAML is imported once into a UI config entry.
 custom_components_auditor:
   github_token: !secret custom_components_auditor_github_token
   # Optional. Omit this line to disable push notifications.
