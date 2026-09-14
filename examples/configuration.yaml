@@ -7,4 +7,3 @@ custom_components_auditor:
   daily_hour: 9
   weekly_weekday: 6
   max_requests_per_run: 45
-
