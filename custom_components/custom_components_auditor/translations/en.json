@@ -8,15 +8,17 @@
         "data": {
           "github_token": "GitHub token",
           "notify_service": "Notification action",
+          "excluded_repositories": "Excluded repositories",
           "daily_hour": "Daily audit hour",
           "weekly_weekday": "Weekly digest day",
-          "max_requests_per_run": "Repositories per unauthenticated run"
+          "max_requests_per_run": "GitHub request budget per unauthenticated run"
         },
         "data_description": {
           "github_token": "Optional read-only token. It increases the API limit and allows a full audit in one run.",
           "notify_service": "Optional action such as notify.mobile_app_your_phone. Leave empty to disable push notifications.",
+          "excluded_repositories": "Optional GitHub repositories to skip, one owner/repository per line.",
           "daily_hour": "Local hour from 0 to 23. The audit starts at 15 minutes past the hour.",
-          "max_requests_per_run": "Batch size used when no GitHub token is configured."
+          "max_requests_per_run": "Maximum API request budget without a token. Repository metadata, Releases and fallback Tags can use up to three requests per repository."
         }
       }
     },
@@ -33,15 +35,17 @@
           "github_token": "New GitHub token",
           "clear_github_token": "Remove the saved GitHub token",
           "notify_service": "Notification action",
+          "excluded_repositories": "Excluded repositories",
           "daily_hour": "Daily audit hour",
           "weekly_weekday": "Weekly digest day",
-          "max_requests_per_run": "Repositories per unauthenticated run"
+          "max_requests_per_run": "GitHub request budget per unauthenticated run"
         },
         "data_description": {
           "github_token": "Optional. Enter a value only to replace the saved token.",
           "notify_service": "Action such as notify.mobile_app_your_phone. Leave empty to disable push notifications.",
+          "excluded_repositories": "Optional GitHub repositories to skip, one owner/repository per line.",
           "daily_hour": "Local hour from 0 to 23. The audit starts at 15 minutes past the hour.",
-          "max_requests_per_run": "Batch size used when no GitHub token is configured."
+          "max_requests_per_run": "Maximum API request budget without a token. Repository metadata, Releases and fallback Tags can use up to three requests per repository."
         }
       }
     }
@@ -61,6 +65,92 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "not_configured": {
+      "message": "HA Auditor is not configured. Add it from Settings > Devices & services."
+    }
+  },
+  "issues": {
+    "github_token_invalid": {
+      "title": "GitHub token is invalid or expired",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Replace the GitHub token",
+            "description": "GitHub rejected the configured token. Enter a replacement token. It will be validated before it is saved.",
+            "data": {
+              "github_token": "New GitHub token"
+            },
+            "data_description": {
+              "github_token": "Use a read-only token. HA Auditor does not display or log this value."
+            }
+          }
+        },
+        "error": {
+          "invalid_auth": "GitHub rejected this token.",
+          "cannot_connect": "GitHub could not be reached. Try again later."
+        },
+        "abort": {
+          "entry_missing": "The HA Auditor configuration entry no longer exists."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "new_releases": {
+        "name": "New releases"
+      }
+    },
+    "binary_sensor": {
+      "attention_required": {
+        "name": "Attention required"
+      }
+    },
+    "button": {
+      "run_audit": {
+        "name": "Run audit now"
+      }
+    }
+  },
+  "common": {
+    "assessment_critical": "Possible incompatibility: release notes contain '{matched_term}'.",
+    "assessment_important": "Read before updating: found '{matched_term}'.",
+    "assessment_feature": "New capability: found '{matched_term}'.",
+    "assessment_minor": "Regular release without a keyword-based risk signal.",
+    "release_not_found": "No GitHub Release matches the available version.",
+    "not_checked": "This version has not been checked in the current cycle.",
+    "release_status_found": "Release notes found",
+    "release_status_not_found": "Release notes not found",
+    "release_status_not_checked": "Release notes not checked yet",
+    "release_status_tag_found": "GitHub tag found; release notes unavailable",
+    "tag_fallback_reason": "No GitHub Release was published for this version. The version was matched using a GitHub tag.",
+    "repository_status_archived": "Repository archived",
+    "repository_status_abandoned": "No repository activity for over two years",
+    "error_authentication_401": "GitHub rejected the token (401). Check or replace it.",
+    "error_rate_limit": "The GitHub rate limit is exhausted; reset: {reset}",
+    "error_authentication_403": "GitHub denied access (403). Check the token permissions.",
+    "error_repository_not_found": "Repository {repository} was not found or is unavailable.",
+    "error_github_status": "GitHub is temporarily unavailable (HTTP {status}).",
+    "error_timeout": "Timed out while checking {repository}.",
+    "error_network": "GitHub network or response error: {error}",
+    "new_release": "New release",
+    "unknown_component": "Unknown component",
+    "notification_title": "Custom Components Audit",
+    "notification_heading": "🧩 Custom components audit",
+    "notification_checked": "Checked: {checked} of {targeted} planned ({total} total)",
+    "notification_critical": "🔴 Critical: {count}",
+    "notification_important": "🟠 Important: {count}",
+    "notification_feature": "🔵 New capabilities: {count}",
+    "notification_minor": "⚪ Minor: {count}",
+    "notification_updates_available": "⬆️ Updates available: {count}",
+    "notification_stale": "🕰️ No releases for over a year: {count}",
+    "notification_archived": "📦 Archived repositories: {count}",
+    "notification_abandoned": "💤 Repositories inactive for over two years: {count}",
+    "notification_partial": "⚠️ The audit completed partially. The result is not complete.",
+    "notification_review": "Review these releases:",
+    "notification_no_new_releases": "No new releases since the previous audit."
   },
   "selector": {
     "audit_mode": {

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,16 @@ SPEC = importlib.util.spec_from_file_location("auditor_release", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
+
+MESSAGES = json.loads(
+    (
+        Path(__file__).parents[1]
+        / "custom_components"
+        / "custom_components_auditor"
+        / "translations"
+        / "en.json"
+    ).read_text(encoding="utf-8")
+)["common"]
 
 
 @pytest.mark.parametrize(
@@ -50,7 +62,17 @@ def test_classification_exposes_matched_term_and_reason() -> None:
 
     assert severity == "critical"
     assert matched == "migration required"
-    assert matched in release.classification_reason(severity, matched)
+    assert matched in release.classification_reason(severity, matched, MESSAGES)
+
+
+def test_classification_reason_uses_translated_template() -> None:
+    messages = {
+        "assessment_important": "Translated assessment: {matched_term}",
+    }
+
+    assert release.classification_reason("important", "security", messages) == (
+        "Translated assessment: security"
+    )
 
 
 def test_summary_removes_markdown_html_and_changelog_link() -> None:
@@ -70,6 +92,142 @@ def test_summary_removes_markdown_html_and_changelog_link() -> None:
 
 def test_summary_is_bounded() -> None:
     assert len(release.summarize_release("x" * 400)) <= 281
+
+
+@pytest.mark.parametrize(
+    ("tag", "version"),
+    [
+        ("v1.2.3", "1.2.3"),
+        ("1.2.3", "v1.2.3"),
+        ("refs/tags/v2.0.0", "2.0.0"),
+        ("release-2026.9.0", "2026.9.0"),
+    ],
+)
+def test_release_version_matching_handles_common_prefixes(
+    tag: str, version: str
+) -> None:
+    candidate = {"tag_name": tag}
+
+    assert release.find_release_for_version([candidate], version) is candidate
+
+
+def test_available_update_is_assessed_on_the_first_audit() -> None:
+    repository = {
+        "repository": "owner/component",
+        "title": "Useful component",
+        "entity_id": "update.useful_component",
+        "installed_version": "1.0.0",
+        "latest_version": "1.1.0",
+        "release_url": "https://github.com/owner/component/releases/latest",
+    }
+    releases = [
+        {
+            "tag_name": "v1.1.0",
+            "name": "Version 1.1.0",
+            "body": "Security fix for authentication handling",
+            "html_url": "https://github.com/owner/component/releases/tag/v1.1.0",
+            "published_at": "2026-09-14T10:00:00Z",
+        }
+    ]
+
+    assessment = release.assess_available_update(repository, releases, MESSAGES)
+
+    assert assessment["release_status"] == "found"
+    assert assessment["release_status_label"] == MESSAGES["release_status_found"]
+    assert assessment["severity"] == "important"
+    assert assessment["matched_term"] == "security"
+    assert assessment["latest_version"] == "1.1.0"
+    assert assessment["summary"] == "Security fix for authentication handling"
+    assert assessment["reason"] == "Read before updating: found 'security'."
+
+
+def test_available_update_reports_missing_matching_release() -> None:
+    repository = {
+        "repository": "owner/component",
+        "title": "Useful component",
+        "entity_id": "update.useful_component",
+        "installed_version": "1.0.0",
+        "latest_version": "2.0.0",
+        "release_url": "https://github.com/owner/component/releases/latest",
+    }
+
+    assessment = release.assess_available_update(
+        repository, [{"tag_name": "v1.0.0"}], MESSAGES
+    )
+
+    assert assessment["release_status"] == "not_found"
+    assert assessment["release_status_label"] == (MESSAGES["release_status_not_found"])
+    assert assessment["severity"] == "unknown"
+    assert assessment["reason"] == MESSAGES["release_not_found"]
+    assert assessment["summary"] == ""
+
+
+def test_tags_are_used_as_release_candidates() -> None:
+    candidates = release.tags_as_release_candidates(
+        "owner/component",
+        [{"name": "v2.0.0+build", "commit": {"sha": "abc123"}}],
+    )
+
+    assert candidates[0]["id"] == "tag:v2.0.0+build:abc123"
+    assert candidates[0]["source"] == "tag"
+    assert candidates[0]["html_url"].endswith("/tree/v2.0.0%2Bbuild")
+
+
+def test_available_update_reports_tag_fallback_without_fake_release_notes() -> None:
+    repository = {
+        "repository": "owner/component",
+        "title": "Useful component",
+        "installed_version": "1.0.0",
+        "latest_version": "2.0.0",
+    }
+    tags = release.tags_as_release_candidates(
+        "owner/component", [{"name": "v2.0.0", "commit": {"sha": "abc123"}}]
+    )
+
+    assessment = release.assess_available_update(repository, tags, MESSAGES)
+
+    assert assessment["release_status"] == "found"
+    assert assessment["release_source"] == "tag"
+    assert assessment["severity"] == "unknown"
+    assert assessment["summary"] == ""
+    assert assessment["reason"] == MESSAGES["tag_fallback_reason"]
+
+
+def test_repository_health_prioritizes_archived_status() -> None:
+    health = release.assess_repository_health(
+        {"archived": True, "pushed_at": "2026-09-01T00:00:00Z"},
+        datetime(2026, 9, 14, tzinfo=UTC),
+        730,
+    )
+
+    assert health["status"] == "archived"
+    assert health["archived"] is True
+
+
+def test_repository_health_detects_two_year_inactivity() -> None:
+    health = release.assess_repository_health(
+        {"archived": False, "pushed_at": "2024-01-01T00:00:00Z"},
+        datetime(2026, 9, 14, tzinfo=UTC),
+        730,
+    )
+
+    assert health["status"] == "abandoned"
+    assert health["days_since_push"] > 730
+
+
+def test_repository_health_keeps_recent_repository_active() -> None:
+    health = release.assess_repository_health(
+        {"archived": False, "pushed_at": "2026-09-01T00:00:00Z"},
+        datetime(2026, 9, 14, tzinfo=UTC),
+        730,
+    )
+
+    assert health["status"] == "active"
+    assert health["days_since_push"] == 13
+
+
+def test_broken_translation_template_fails_to_a_machine_key() -> None:
+    assert release.localize({"message": "{missing}"}, "message") == "message"
 
 
 def test_merge_changes_preserves_order_and_deduplicates_url() -> None:

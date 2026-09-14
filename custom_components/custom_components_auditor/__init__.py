@@ -5,25 +5,29 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later, async_track_time_change
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .config import normalize_settings
 from .const import (
+    ABANDONED_REPOSITORY_DAYS,
     CONF_DAILY_HOUR,
+    CONF_EXCLUDED_REPOSITORIES,
     CONF_GITHUB_TOKEN,
     CONF_MAX_REQUESTS,
     CONF_NOTIFY_SERVICE,
@@ -33,20 +37,27 @@ from .const import (
     DEFAULT_NOTIFY_SERVICE,
     DEFAULT_WEEKLY_WEEKDAY,
     DOMAIN,
-    SENSOR_ENTITY_ID,
+    MESSAGE_KEYS,
     SERVICE_RUN_AUDIT,
     SEVERITY_ORDER,
     STORE_KEY,
     STORE_VERSION,
+    TOKEN_REPAIR_ISSUE_ID,
 )
 from .release import (
     _merge_changes,
+    assess_available_update,
+    assess_repository_health,
     classification_reason,
     classify_release_details,
+    localize,
     summarize_release,
+    tags_as_release_candidates,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+PLATFORMS = (Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON)
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -56,15 +67,15 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(
                     CONF_NOTIFY_SERVICE, default=DEFAULT_NOTIFY_SERVICE
                 ): cv.string,
-                vol.Optional(
-                    CONF_DAILY_HOUR, default=DEFAULT_DAILY_HOUR
-                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=23)),
+                vol.Optional(CONF_DAILY_HOUR, default=DEFAULT_DAILY_HOUR): vol.All(
+                    vol.Coerce(int), vol.Range(min=0, max=23)
+                ),
                 vol.Optional(
                     CONF_WEEKLY_WEEKDAY, default=DEFAULT_WEEKLY_WEEKDAY
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=6)),
-                vol.Optional(
-                    CONF_MAX_REQUESTS, default=DEFAULT_MAX_REQUESTS
-                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=500)),
+                vol.Optional(CONF_MAX_REQUESTS, default=DEFAULT_MAX_REQUESTS): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=500)
+                ),
             }
         )
     },
@@ -91,8 +102,8 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         manager = next(iter(managers.values()), None)
         if manager is None:
             raise ServiceValidationError(
-                "HA Auditor is not configured. Add it from Settings > "
-                "Devices & services."
+                translation_domain=DOMAIN,
+                translation_key="not_configured",
             )
         await manager.async_run(call.data["mode"], call.data["notify"])
 
@@ -115,25 +126,44 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HA Auditor from a UI config entry."""
     settings = normalize_settings(entry.data, entry.options)
-    manager = ComponentsAuditor(hass, settings)
+    translations = await async_get_translations(
+        hass,
+        str(hass.config.language or "en"),
+        "common",
+        {DOMAIN},
+    )
+    prefix = f"component.{DOMAIN}.common."
+    messages = {key: translations.get(f"{prefix}{key}", key) for key in MESSAGE_KEYS}
+    manager = ComponentsAuditor(hass, entry.entry_id, settings, messages)
     await manager.async_initialize()
-    manager.async_start_schedules()
 
     managers: dict[str, ComponentsAuditor] = hass.data.setdefault(DOMAIN, {})
     managers[entry.entry_id] = manager
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except Exception:
+        managers.pop(entry.entry_id, None)
+        manager.async_shutdown()
+        raise
+    manager.async_start_schedules()
     manager.add_unsubscriber(entry.add_update_listener(_async_reload_entry))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload HA Auditor and cancel all background callbacks."""
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
     managers: dict[str, ComponentsAuditor] = hass.data.get(DOMAIN, {})
     manager = managers.pop(entry.entry_id, None)
     if manager is not None:
         manager.async_shutdown()
-    if not managers:
-        hass.states.async_remove(SENSOR_ENTITY_ID)
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove repair issues when the HA Auditor entry is deleted."""
+    ir.async_delete_issue(hass, DOMAIN, TOKEN_REPAIR_ISSUE_ID)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -144,17 +174,27 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 class ComponentsAuditor:
     """Discover HACS update entities and audit GitHub releases."""
 
-    def __init__(self, hass: HomeAssistant, config: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry_id: str,
+        config: Mapping[str, Any],
+        messages: Mapping[str, str],
+    ) -> None:
         self.hass = hass
+        self.entry_id = entry_id
+        self.messages = messages
         self.token = config.get(CONF_GITHUB_TOKEN, "").strip()
         self.notify_service = config[CONF_NOTIFY_SERVICE]
         self.daily_hour = config[CONF_DAILY_HOUR]
         self.weekly_weekday = config[CONF_WEEKLY_WEEKDAY]
         self.max_requests = config[CONF_MAX_REQUESTS]
+        self.excluded_repositories = set(config[CONF_EXCLUDED_REPOSITORIES])
         self.store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
         self.lock = asyncio.Lock()
         self.data: dict[str, Any] = {}
         self._unsubscribers: list[Any] = []
+        self._listeners: set[Callable[[], None]] = set()
 
     async def async_initialize(self) -> None:
         """Restore the previous checkpoint and publish the sensor."""
@@ -170,6 +210,17 @@ class ComponentsAuditor:
     def add_unsubscriber(self, unsubscribe: Any) -> None:
         """Track a callback that must be removed when the entry unloads."""
         self._unsubscribers.append(unsubscribe)
+
+    @callback
+    def async_add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Subscribe a native entity to manager data changes."""
+        self._listeners.add(listener)
+
+        @callback
+        def remove_listener() -> None:
+            self._listeners.discard(listener)
+
+        return remove_listener
 
     def async_start_schedules(self) -> None:
         """Start the delayed baseline and recurring audit schedules."""
@@ -216,6 +267,7 @@ class ComponentsAuditor:
         """Cancel listeners and timers registered for this config entry."""
         while self._unsubscribers:
             self._unsubscribers.pop()()
+        self._listeners.clear()
 
     async def async_run(self, mode: str, notify: bool) -> None:
         """Run one audit without overlapping another run."""
@@ -232,9 +284,7 @@ class ComponentsAuditor:
             try:
                 result = await self._audit(mode)
                 self.data.update(result)
-                self.data["status"] = (
-                    "partial" if result["partial_audit"] else "idle"
-                )
+                self.data["status"] = "partial" if result["partial_audit"] else "idle"
                 # Keep last_checked for backwards compatibility with the v1 card.
                 self.data["last_checked"] = attempt_at
                 if not result["partial_audit"]:
@@ -251,11 +301,7 @@ class ComponentsAuditor:
                 )
                 if should_notify:
                     delivered = await self._notify(mode)
-                    if (
-                        mode == "digest"
-                        and delivered
-                        and not result["partial_audit"]
-                    ):
+                    if mode == "digest" and delivered and not result["partial_audit"]:
                         self.data["pending_changes"] = []
                         await self.store.async_save(self.data)
                         self._publish()
@@ -268,7 +314,7 @@ class ComponentsAuditor:
                 self._publish()
 
     async def _audit(self, mode: str) -> dict[str, Any]:
-        repositories, skipped = self._discover_repositories()
+        repositories, skipped, excluded = self._discover_repositories()
         component_state = self.data.setdefault("components", {})
         active_keys = {item["repository"].lower() for item in repositories}
         component_state = {
@@ -276,7 +322,9 @@ class ComponentsAuditor:
         }
         total = len(repositories)
         request_limit = (
-            max(self.max_requests, total) if self.token else self.max_requests
+            max(self.max_requests, total)
+            if self.token
+            else max(min(self.max_requests, 60) // 3, 1)
         )
 
         if mode in ("full", "digest") and self.token:
@@ -299,9 +347,26 @@ class ComponentsAuditor:
             key = repository["repository"].lower()
             previous = component_state.get(key, {})
             try:
-                releases, etag, rate_remaining = await self._fetch_releases(
-                    repository["repository"], previous.get("etag")
+                metadata, metadata_remaining = await self._fetch_repository_metadata(
+                    repository["repository"]
                 )
+                if metadata_remaining is not None:
+                    rate_remaining = metadata_remaining
+                previous_assessment = previous.get("available_update")
+                etag = previous.get("etag")
+                if previous.get("release_source") != "release":
+                    etag = None
+                if repository["update_available"] and (
+                    not isinstance(previous_assessment, Mapping)
+                    or previous_assessment.get("latest_version")
+                    != repository["latest_version"]
+                ):
+                    etag = None
+                releases, etag, release_remaining = await self._fetch_releases(
+                    repository["repository"], etag
+                )
+                if release_remaining is not None:
+                    rate_remaining = release_remaining
             except RateLimitReached as err:
                 error_details.append(
                     self._make_error_detail(repository, err.category, str(err))
@@ -312,6 +377,8 @@ class ComponentsAuditor:
                 error_details.append(
                     self._make_error_detail(repository, err.category, str(err))
                 )
+                if err.category == "authentication":
+                    break
                 continue
             except Exception as err:  # noqa: BLE001 - isolate one repository
                 _LOGGER.warning("Audit failed for %s: %s", key, err)
@@ -325,17 +392,30 @@ class ComponentsAuditor:
                 **previous,
                 **repository,
                 "checked_at": dt_util.utcnow().isoformat(),
+                "repository_health": assess_repository_health(
+                    metadata,
+                    dt_util.utcnow(),
+                    ABANDONED_REPOSITORY_DAYS,
+                ),
             }
             if etag:
                 current["etag"] = etag
 
             if releases is not None:
                 published = [item for item in releases if not item.get("draft")]
+                current["release_source"] = (
+                    str(published[0].get("source") or "release")
+                    if published
+                    else "none"
+                )
                 last_id = previous.get("last_release_id")
+                last_tag = previous.get("last_release_tag")
                 initialized = bool(previous.get("initialized"))
                 unseen: list[dict[str, Any]] = []
                 for release in published:
-                    if release.get("id") == last_id:
+                    if release.get("id") == last_id or (
+                        last_tag and release.get("tag_name") == last_tag
+                    ):
                         break
                     unseen.append(release)
 
@@ -360,16 +440,26 @@ class ComponentsAuditor:
 
                 current["initialized"] = True
 
+                if repository["update_available"]:
+                    current["available_update"] = assess_available_update(
+                        repository, published, self.messages
+                    )
+                else:
+                    current.pop("available_update", None)
+            elif not repository["update_available"]:
+                current.pop("available_update", None)
+
             component_state[key] = current
             await asyncio.sleep(0.15)
 
         changes.sort(
             key=lambda item: (
-                SEVERITY_ORDER[item["severity"]], item.get("published_at", "")
+                SEVERITY_ORDER.get(item["severity"], -1),
+                item.get("published_at", ""),
             ),
             reverse=True,
         )
-        counts = {key: 0 for key in SEVERITY_ORDER}
+        counts = {key: 0 for key in (*SEVERITY_ORDER, "unknown")}
         for change in changes:
             counts[change["severity"]] += 1
 
@@ -380,22 +470,28 @@ class ComponentsAuditor:
             changes, self.data.get("pending_changes", []), 100
         )
         stale_components = self._get_stale_components(component_state)
+        repository_health_details = self._get_repository_health_details(component_state)
+        repository_health_counts = {
+            "archived": sum(
+                1 for item in repository_health_details if item["status"] == "archived"
+            ),
+            "abandoned": sum(
+                1 for item in repository_health_details if item["status"] == "abandoned"
+            ),
+        }
         updates_available = sum(1 for item in repositories if item["update_available"])
-        available_updates = [
-            {
-                "component": item["title"],
-                "entity_id": item["entity_id"],
-                "installed_version": item["installed_version"],
-                "latest_version": item["latest_version"],
-                "url": item["release_url"],
-            }
-            for item in repositories
-            if item["update_available"]
-        ]
+        available_updates = self._get_available_updates(repositories, component_state)
+        available_update_counts = {key: 0 for key in (*SEVERITY_ORDER, "unknown")}
+        for update in available_updates:
+            severity = update.get("severity", "unknown")
+            available_update_counts[severity] = (
+                available_update_counts.get(severity, 0) + 1
+            )
         error_counts: dict[str, int] = {}
         for error in error_details:
             category = error["category"]
             error_counts[category] = error_counts.get(category, 0) + 1
+        self._sync_token_repair(error_counts.get("authentication", 0) > 0)
         not_attempted = max(len(selected) - attempted, 0)
         partial_audit = bool(error_details or not_attempted)
 
@@ -415,10 +511,15 @@ class ComponentsAuditor:
             "pending_changes": pending_changes,
             "updates_available": updates_available,
             "available_updates": available_updates,
+            "available_update_counts": available_update_counts,
             "up_to_date_components": max(total - updates_available, 0),
             "stale_components": len(stale_components),
             "stale_component_details": stale_components,
+            "repository_health_counts": repository_health_counts,
+            "repository_health_details": repository_health_details,
             "skipped_components": skipped,
+            "excluded_components": len(excluded),
+            "excluded_repositories": excluded,
             "errors": [item["message"] for item in error_details[:10]],
             "error_details": error_details[:10],
             "error_counts": error_counts,
@@ -426,6 +527,101 @@ class ComponentsAuditor:
             "github_authenticated": bool(self.token),
             "github_rate_remaining": rate_remaining,
         }
+
+    @callback
+    def _sync_token_repair(self, authentication_failed: bool) -> None:
+        """Create or clear the repair issue for an invalid GitHub token."""
+        if self.token and authentication_failed:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                TOKEN_REPAIR_ISSUE_ID,
+                data={"entry_id": self.entry_id},
+                is_fixable=True,
+                is_persistent=True,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=TOKEN_REPAIR_ISSUE_ID,
+            )
+            return
+        ir.async_delete_issue(self.hass, DOMAIN, TOKEN_REPAIR_ISSUE_ID)
+
+    def _get_available_updates(
+        self,
+        repositories: list[dict[str, Any]],
+        component_state: Mapping[str, Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return current HACS updates enriched with matching release details."""
+        updates: list[dict[str, Any]] = []
+        for repository in repositories:
+            if not repository["update_available"]:
+                continue
+            stored = component_state.get(repository["repository"].lower(), {})
+            assessment = stored.get("available_update")
+            if (
+                isinstance(assessment, Mapping)
+                and assessment.get("latest_version") == repository["latest_version"]
+            ):
+                updates.append(self._with_localized_reason(assessment))
+                continue
+            updates.append(
+                {
+                    "repository": repository["repository"],
+                    "component": repository["title"],
+                    "entity_id": repository["entity_id"],
+                    "installed_version": repository["installed_version"],
+                    "latest_version": repository["latest_version"],
+                    "release_status": "not_checked",
+                    "release_status_label": localize(
+                        self.messages, "release_status_not_checked"
+                    ),
+                    "severity": "unknown",
+                    "reason": localize(self.messages, "not_checked"),
+                    "matched_term": "",
+                    "summary": "",
+                    "url": repository["release_url"],
+                    "published_at": "",
+                }
+            )
+        updates.sort(
+            key=lambda item: (
+                SEVERITY_ORDER.get(str(item.get("severity")), -1),
+                str(item.get("component", "")).casefold(),
+            ),
+            reverse=True,
+        )
+        return updates
+
+    def _with_localized_reason(self, item: Mapping[str, Any]) -> dict[str, Any]:
+        """Render a stored assessment in the currently selected HA language."""
+        localized = dict(item)
+        release_status = str(item.get("release_status") or "")
+        if release_status == "matched":
+            release_status = "found"
+            localized["release_status"] = release_status
+        status_message_key = {
+            "found": "release_status_found",
+            "not_found": "release_status_not_found",
+            "not_checked": "release_status_not_checked",
+        }.get(release_status)
+        if item.get("release_source") == "tag":
+            status_message_key = "release_status_tag_found"
+        if status_message_key:
+            localized["release_status_label"] = localize(
+                self.messages, status_message_key
+            )
+        if release_status == "not_found":
+            localized["reason"] = localize(self.messages, "release_not_found")
+        elif release_status == "not_checked":
+            localized["reason"] = localize(self.messages, "not_checked")
+        elif item.get("release_source") == "tag":
+            localized["reason"] = localize(self.messages, "tag_fallback_reason")
+        elif item.get("severity") in SEVERITY_ORDER:
+            localized["reason"] = classification_reason(
+                str(item["severity"]),
+                str(item.get("matched_term") or ""),
+                self.messages,
+            )
+        return localized
 
     @staticmethod
     def _make_error_detail(
@@ -439,10 +635,13 @@ class ComponentsAuditor:
             "message": str(message)[:180],
         }
 
-    def _discover_repositories(self) -> tuple[list[dict[str, Any]], int]:
+    def _discover_repositories(
+        self,
+    ) -> tuple[list[dict[str, Any]], int, list[str]]:
         registry = er.async_get(self.hass)
         found: dict[str, dict[str, Any]] = {}
         skipped = 0
+        excluded: list[str] = []
 
         for entry in registry.entities.values():
             if (
@@ -461,8 +660,14 @@ class ComponentsAuditor:
             if not match:
                 skipped += 1
                 continue
-            repository = f"{match.group(1)}/{match.group(2).removesuffix('.git')}"
+            repository_name = match.group(2)
+            if repository_name.casefold().endswith(".git"):
+                repository_name = repository_name[:-4]
+            repository = f"{match.group(1)}/{repository_name}"
             key = repository.lower()
+            if key in self.excluded_repositories:
+                excluded.append(repository)
+                continue
             found[key] = {
                 "repository": repository,
                 "entity_id": entry.entity_id,
@@ -480,22 +685,71 @@ class ComponentsAuditor:
         return (
             sorted(found.values(), key=lambda item: item["title"].casefold()),
             skipped,
+            sorted(excluded, key=str.casefold),
         )
+
+    async def _fetch_repository_metadata(
+        self, repository: str
+    ) -> tuple[dict[str, Any], int | None]:
+        """Fetch repository status and activity metadata."""
+        payload, _etag, remaining = await self._github_get(repository, "")
+        if not isinstance(payload, dict):
+            raise GitHubRequestError(
+                "github",
+                localize(self.messages, "error_network", error="invalid metadata"),
+            )
+        return payload, remaining
 
     async def _fetch_releases(
         self, repository: str, etag: str | None
     ) -> tuple[list[dict[str, Any]] | None, str | None, int | None]:
+        payload, response_etag, remaining = await self._github_get(
+            repository, "releases?per_page=10", etag
+        )
+        if payload is None:
+            return None, response_etag, remaining
+        if not isinstance(payload, list):
+            raise GitHubRequestError(
+                "github",
+                localize(self.messages, "error_network", error="invalid releases"),
+            )
+        if payload:
+            return (
+                [dict(item, source="release") for item in payload],
+                response_etag,
+                remaining,
+            )
+
+        tags, _tag_etag, tag_remaining = await self._github_get(
+            repository, "tags?per_page=100"
+        )
+        if not isinstance(tags, list):
+            raise GitHubRequestError(
+                "github",
+                localize(self.messages, "error_network", error="invalid tags"),
+            )
+        return (
+            tags_as_release_candidates(repository, tags),
+            response_etag,
+            tag_remaining if tag_remaining is not None else remaining,
+        )
+
+    async def _github_get(
+        self, repository: str, path: str, etag: str | None = None
+    ) -> tuple[Any, str | None, int | None]:
+        """Fetch one GitHub API resource with shared error handling."""
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "Home-Assistant-Custom-Components-Auditor/1.0",
+            "User-Agent": "HA-Auditor/1.3.0-beta.1",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         if etag:
             headers["If-None-Match"] = etag
 
-        url = f"https://api.github.com/repos/{repository}/releases?per_page=10"
+        suffix = f"/{path}" if path else ""
+        url = f"https://api.github.com/repos/{repository}{suffix}"
         session = async_get_clientsession(self.hass)
         try:
             async with asyncio.timeout(25):
@@ -511,31 +765,37 @@ class ComponentsAuditor:
                     if response.status == 401:
                         raise GitHubRequestError(
                             "authentication",
-                            "GitHub відхилив token (401). Перевір або заміни token.",
+                            localize(self.messages, "error_authentication_401"),
                         )
                     if response.status == 429 or (
                         response.status == 403 and remaining == 0
                     ):
-                        reset = response.headers.get(
-                            "X-RateLimit-Reset", "невідомо"
-                        )
+                        reset = response.headers.get("X-RateLimit-Reset", "unknown")
                         raise RateLimitReached(
-                            f"GitHub rate limit вичерпано; reset: {reset}"
+                            localize(self.messages, "error_rate_limit", reset=reset)
                         )
                     if response.status == 403:
                         raise GitHubRequestError(
                             "authentication",
-                            "GitHub заборонив доступ (403). Перевір права token.",
+                            localize(self.messages, "error_authentication_403"),
                         )
                     if response.status == 404:
                         raise GitHubRequestError(
                             "repository_not_found",
-                            f"Repository {repository} не знайдено або він недоступний.",
+                            localize(
+                                self.messages,
+                                "error_repository_not_found",
+                                repository=repository,
+                            ),
                         )
                     if response.status >= 500:
                         raise GitHubRequestError(
                             "github",
-                            f"GitHub тимчасово недоступний (HTTP {response.status}).",
+                            localize(
+                                self.messages,
+                                "error_github_status",
+                                status=response.status,
+                            ),
                         )
                     response.raise_for_status()
                     payload = await response.json()
@@ -544,27 +804,39 @@ class ComponentsAuditor:
             raise
         except TimeoutError as err:
             raise GitHubRequestError(
-                "network", f"Timeout під час перевірки {repository}."
+                "network",
+                localize(self.messages, "error_timeout", repository=repository),
             ) from err
         except Exception as err:
             raise GitHubRequestError(
                 "network",
-                f"Помилка мережі або відповіді GitHub: {str(err)[:120]}",
+                localize(self.messages, "error_network", error=str(err)[:120]),
             ) from err
 
     def _make_change(
         self, repository: Mapping[str, Any], release: Mapping[str, Any]
     ) -> dict[str, Any]:
         body = str(release.get("body") or "")
-        title = str(release.get("name") or release.get("tag_name") or "Новий реліз")
-        severity, matched_term = classify_release_details(f"{title}\n{body}")
+        title = str(
+            release.get("name")
+            or release.get("tag_name")
+            or localize(self.messages, "new_release")
+        )
+        release_source = str(release.get("source") or "release")
+        if release_source == "tag":
+            severity, matched_term = "unknown", ""
+            reason = localize(self.messages, "tag_fallback_reason")
+        else:
+            severity, matched_term = classify_release_details(f"{title}\n{body}")
+            reason = classification_reason(severity, matched_term, self.messages)
         return {
             "repository": repository["repository"],
             "component": repository["title"],
             "installed_version": repository["installed_version"],
             "version": str(release.get("tag_name") or title),
+            "release_source": release_source,
             "severity": severity,
-            "reason": classification_reason(severity, matched_term),
+            "reason": reason,
             "matched_term": matched_term,
             "summary": summarize_release(body),
             "url": str(release.get("html_url") or repository["release_url"]),
@@ -588,7 +860,8 @@ class ComponentsAuditor:
                 stale.append(
                     {
                         "component": str(
-                            component.get("title") or "Невідомий компонент"
+                            component.get("title")
+                            or localize(self.messages, "unknown_component")
                         ),
                         "version": str(component.get("last_release_tag") or ""),
                         "published_at": str(published),
@@ -603,60 +876,136 @@ class ComponentsAuditor:
         stale.sort(key=lambda item: item["days_without_release"], reverse=True)
         return stale
 
+    def _get_repository_health_details(
+        self,
+        components: Mapping[str, Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return archived and long-abandoned repositories."""
+        details: list[dict[str, Any]] = []
+        for component in components.values():
+            health = component.get("repository_health")
+            if not isinstance(health, Mapping) or health.get("status") not in {
+                "archived",
+                "abandoned",
+            }:
+                continue
+            details.append(
+                {
+                    "component": str(
+                        component.get("title") or component.get("repository") or ""
+                    ),
+                    "repository": str(component.get("repository") or ""),
+                    **dict(health),
+                    "status_label": localize(
+                        self.messages,
+                        f"repository_status_{health['status']}",
+                    ),
+                }
+            )
+        details.sort(
+            key=lambda item: (
+                item["status"] != "archived",
+                -(item.get("days_since_push") or 0),
+            )
+        )
+        return details
+
+    def _with_localized_repository_health(
+        self, item: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Render a stored repository-health label in the current HA language."""
+        localized = dict(item)
+        status = str(item.get("status") or "")
+        if status in {"archived", "abandoned"}:
+            localized["status_label"] = localize(
+                self.messages, f"repository_status_{status}"
+            )
+        return localized
+
     async def _notify(self, mode: str) -> bool:
         if not self.notify_service:
             _LOGGER.debug("Notification service is not configured; skipping digest")
             return False
 
-        changes = (
+        stored_changes = (
             self.data.get("pending_changes", [])
             if mode == "digest"
             else self.data.get("last_run_changes", [])
         )
+        changes = [self._with_localized_reason(item) for item in stored_changes]
         counts = {key: 0 for key in SEVERITY_ORDER}
         for change in changes:
             severity = change.get("severity", "minor")
             counts[severity] = counts.get(severity, 0) + 1
         lines = [
-            "🧩 Аудит кастомних компонентів",
+            localize(self.messages, "notification_heading"),
             "",
-            f"Перевірено: {self.data.get('checked_this_run', 0)} "
-            f"із {self.data.get('targeted_this_run', 0)} запланованих "
-            f"({self.data.get('total_components', 0)} загалом)",
-            f"🔴 Критичні: {counts.get('critical', 0)}",
-            f"🟠 Важливі: {counts.get('important', 0)}",
-            f"🔵 Нові можливості: {counts.get('feature', 0)}",
-            f"⚪ Незначні: {counts.get('minor', 0)}",
-            f"⬆️ Доступно оновлень: {self.data.get('updates_available', 0)}",
-            f"🕰️ Без релізів понад рік: {self.data.get('stale_components', 0)}",
+            localize(
+                self.messages,
+                "notification_checked",
+                checked=self.data.get("checked_this_run", 0),
+                targeted=self.data.get("targeted_this_run", 0),
+                total=self.data.get("total_components", 0),
+            ),
+            localize(
+                self.messages, "notification_critical", count=counts.get("critical", 0)
+            ),
+            localize(
+                self.messages,
+                "notification_important",
+                count=counts.get("important", 0),
+            ),
+            localize(
+                self.messages, "notification_feature", count=counts.get("feature", 0)
+            ),
+            localize(self.messages, "notification_minor", count=counts.get("minor", 0)),
+            localize(
+                self.messages,
+                "notification_updates_available",
+                count=self.data.get("updates_available", 0),
+            ),
+            localize(
+                self.messages,
+                "notification_stale",
+                count=self.data.get("stale_components", 0),
+            ),
+            localize(
+                self.messages,
+                "notification_archived",
+                count=self.data.get("repository_health_counts", {}).get("archived", 0),
+            ),
+            localize(
+                self.messages,
+                "notification_abandoned",
+                count=self.data.get("repository_health_counts", {}).get("abandoned", 0),
+            ),
         ]
         if self.data.get("partial_audit"):
             lines.extend(
                 [
                     "",
-                    "⚠️ Перевірку завершено частково. Результат не є повним.",
+                    localize(self.messages, "notification_partial"),
                 ]
             )
             for error in self.data.get("error_details", [])[:3]:
                 lines.append(f"• {error['component']}: {error['message']}")
         if changes:
-            lines.extend(["", "Варто переглянути:"])
+            lines.extend(["", localize(self.messages, "notification_review")])
             for change in changes[:5]:
                 marker = {
                     "critical": "🔴",
                     "important": "🟠",
                     "feature": "🔵",
                     "minor": "⚪",
-                }[change["severity"]]
-                lines.append(
-                    f"{marker} {change['component']} → {change['version']}"
-                )
+                    "unknown": "❔",
+                }.get(change["severity"], "❔")
+                lines.append(f"{marker} {change['component']} → {change['version']}")
                 if change.get("reason"):
                     lines.append(f"• {change['reason']}")
                 if change["summary"]:
                     lines.append(f"• {change['summary']}")
         elif mode == "digest":
-            lines.extend(["", "Нових релізів від попередньої перевірки немає."])
+            lines.extend(["", localize(self.messages, "notification_no_new_releases")])
 
         domain, separator, service = self.notify_service.partition(".")
         if not separator or not self.hass.services.has_service(domain, service):
@@ -666,7 +1015,7 @@ class ComponentsAuditor:
             domain,
             service,
             {
-                "title": "Custom Components Audit",
+                "title": localize(self.messages, "notification_title"),
                 "message": "\n".join(lines)[:3900],
                 "data": {"tag": "custom_components_audit"},
             },
@@ -674,11 +1023,22 @@ class ComponentsAuditor:
         )
         return True
 
-    def _publish(self) -> None:
+    @property
+    def attention_required(self) -> bool:
+        """Return whether the current result needs user attention."""
+        counts = self.data.get("available_update_counts", {})
+        health = self.data.get("repository_health_counts", {})
+        return self.data.get("status") in {"partial", "error"} or bool(
+            counts.get("critical", 0)
+            or counts.get("important", 0)
+            or health.get("archived", 0)
+            or health.get("abandoned", 0)
+        )
+
+    def state_attributes(self) -> dict[str, Any]:
+        """Return bounded attributes for the public audit sensor."""
         counts = self.data.get("counts", {})
-        attributes = {
-            "friendly_name": "Аудит кастомних компонентів",
-            "icon": "mdi:puzzle-check-outline",
+        return {
             "status": self.data.get("status", "idle"),
             "last_checked": self.data.get("last_checked"),
             "last_attempt": self.data.get("last_attempt"),
@@ -697,15 +1057,31 @@ class ComponentsAuditor:
             "new_features": counts.get("feature", 0),
             "minor": counts.get("minor", 0),
             "updates_available": self.data.get("updates_available", 0),
-            "available_updates": self.data.get("available_updates", [])[:10],
+            "available_updates": [
+                self._with_localized_reason(item)
+                for item in self.data.get("available_updates", [])[:10]
+            ],
+            "available_update_counts": self.data.get("available_update_counts", {}),
+            "attention_required": self.attention_required,
             "up_to_date_components": self.data.get("up_to_date_components", 0),
             "stale_components": self.data.get("stale_components", 0),
-            "stale_component_details": self.data.get(
-                "stale_component_details", []
-            )[:8],
+            "stale_component_details": self.data.get("stale_component_details", [])[:8],
+            "repository_health_counts": self.data.get("repository_health_counts", {}),
+            "repository_health_details": [
+                self._with_localized_repository_health(item)
+                for item in self.data.get("repository_health_details", [])[:10]
+            ],
             "skipped_components": self.data.get("skipped_components", 0),
-            "last_run_changes": self.data.get("last_run_changes", [])[:8],
-            "latest_changes": self.data.get("latest_changes", [])[:8],
+            "excluded_components": self.data.get("excluded_components", 0),
+            "excluded_repositories": self.data.get("excluded_repositories", [])[:20],
+            "last_run_changes": [
+                self._with_localized_reason(item)
+                for item in self.data.get("last_run_changes", [])[:8]
+            ],
+            "latest_changes": [
+                self._with_localized_reason(item)
+                for item in self.data.get("latest_changes", [])[:8]
+            ],
             "pending_digest_changes": len(self.data.get("pending_changes", [])),
             "errors": self.data.get("errors", []),
             "error_details": self.data.get("error_details", [])[:5],
@@ -716,11 +1092,12 @@ class ComponentsAuditor:
             "github_rate_remaining": self.data.get("github_rate_remaining"),
             "last_error": self.data.get("last_error", ""),
         }
-        self.hass.states.async_set(
-            SENSOR_ENTITY_ID,
-            str(self.data.get("new_release_count", 0)),
-            attributes,
-        )
+
+    @callback
+    def _publish(self) -> None:
+        """Notify native Home Assistant entities about updated manager data."""
+        for listener in tuple(self._listeners):
+            listener()
 
 
 class RateLimitReached(Exception):

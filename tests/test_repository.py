@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
+from string import Formatter
 
 import pytest
 import yaml
@@ -26,7 +28,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.1.0"
+    assert manifest["version"] == "1.3.0-beta.1"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -67,6 +69,16 @@ def test_config_flow_has_bilingual_translations() -> None:
     ukrainian = json.loads(
         (INTEGRATION / "translations" / "uk.json").read_text(encoding="utf-8")
     )
+    constants = ast.parse((INTEGRATION / "const.py").read_text(encoding="utf-8"))
+    message_keys = next(
+        ast.literal_eval(node.value)
+        for node in constants.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "MESSAGE_KEYS"
+            for target in node.targets
+        )
+    )
 
     for translation in (strings, english, ukrainian):
         assert set(translation) == {
@@ -74,14 +86,22 @@ def test_config_flow_has_bilingual_translations() -> None:
             "config",
             "options",
             "services",
+            "exceptions",
+            "issues",
+            "entity",
+            "common",
             "selector",
         }
         assert "user" in translation["config"]["step"]
         assert "init" in translation["options"]["step"]
+        assert "excluded_repositories" in translation["config"]["step"]["user"]["data"]
+        assert "excluded_repositories" in translation["options"]["step"]["init"]["data"]
         assert set(translation["services"]["run_audit"]["fields"]) == {
             "mode",
             "notify",
         }
+        assert set(translation["exceptions"]) == {"not_configured"}
+        assert set(translation["issues"]) == {"github_token_invalid"}
         assert set(translation["selector"]["audit_mode"]["options"]) == {
             "daily",
             "full",
@@ -96,8 +116,40 @@ def test_config_flow_has_bilingual_translations() -> None:
             "5",
             "6",
         }
+        assert set(translation["entity"]) == {
+            "sensor",
+            "binary_sensor",
+            "button",
+        }
+        assert set(translation["common"]) == set(strings["common"])
+
+    assert set(strings["common"]) == set(message_keys)
+
+    for key, english_message in english["common"].items():
+        english_fields = {
+            field_name
+            for _literal, field_name, _format_spec, _conversion in Formatter().parse(
+                english_message
+            )
+            if field_name
+        }
+        ukrainian_fields = {
+            field_name
+            for _literal, field_name, _format_spec, _conversion in Formatter().parse(
+                ukrainian["common"][key]
+            )
+            if field_name
+        }
+        assert ukrainian_fields == english_fields
 
     assert strings == english
+
+
+def test_translation_contribution_guide_is_present() -> None:
+    guide = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    assert "translations/<language_code>.json" in guide
+    assert "{matched_term}" in guide
 
 
 def test_mit_license_is_present() -> None:
@@ -115,9 +167,7 @@ def test_services_yaml_is_valid() -> None:
     assert "run_audit" in services
     assert set(services["run_audit"]["fields"]) == {"mode", "notify"}
     assert (
-        services["run_audit"]["fields"]["mode"]["selector"]["select"][
-            "translation_key"
-        ]
+        services["run_audit"]["fields"]["mode"]["selector"]["select"]["translation_key"]
         == "audit_mode"
     )
 
@@ -126,6 +176,26 @@ def test_service_icon_is_present() -> None:
     icons = json.loads((INTEGRATION / "icons.json").read_text(encoding="utf-8"))
 
     assert icons["services"]["run_audit"]["service"] == "mdi:refresh"
+
+
+def test_native_entity_platforms_are_packaged() -> None:
+    for platform in ("sensor", "binary_sensor", "button"):
+        assert (INTEGRATION / f"{platform}.py").is_file()
+
+    integration_source = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
+    assert "async_forward_entry_setups(entry, PLATFORMS)" in integration_source
+    assert "hass.states.async_set" not in integration_source
+
+
+def test_fixable_github_token_repair_is_packaged() -> None:
+    repairs = (INTEGRATION / "repairs.py").read_text(encoding="utf-8")
+    integration = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
+
+    assert "GitHubTokenRepairFlow" in repairs
+    assert "async_create_fix_flow" in repairs
+    assert "is_fixable=True" in integration
+    assert "is_persistent=True" in integration
+    assert "async_remove_entry" in integration
 
 
 def test_integration_brand_icon_is_packaged_locally() -> None:

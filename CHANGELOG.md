@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.0-beta.1
+
+- Add repository exclusions to the UI options flow.
+- Fall back to GitHub Tags when a repository has no Releases.
+- Detect archived repositories and repositories with no push for 730 days.
+- Add a fixable Home Assistant Repair for invalid or expired GitHub tokens.
+- Budget unauthenticated audits for repository metadata, Releases and Tags.
+
+## 1.2.0
+
+- Assess the HACS version currently available even during the first audit.
+- Match common GitHub tag prefixes such as `v1.2.3` and `release-1.2.3`.
+- Publish a reason, summary and release link for every available update.
+- Show whether matching release notes were found, not found or not checked yet.
+- Add native New releases, Attention required and Run audit now entities.
+- Keep first-run notifications silent while still showing actionable results.
+- Move all audit, error and notification text into contributor-friendly locale
+  files under `translations`.
+
 ## 1.1.0
 
 - Add UI setup through Settings > Devices & services.

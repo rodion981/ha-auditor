@@ -25,6 +25,7 @@ from .config import normalize_settings
 from .const import (
     CONF_CLEAR_GITHUB_TOKEN,
     CONF_DAILY_HOUR,
+    CONF_EXCLUDED_REPOSITORIES,
     CONF_GITHUB_TOKEN,
     CONF_MAX_REQUESTS,
     CONF_NOTIFY_SERVICE,
@@ -34,9 +35,7 @@ from .const import (
 )
 
 
-def _settings_schema(
-    current: dict[str, Any], *, allow_token_clear: bool
-) -> vol.Schema:
+def _settings_schema(current: dict[str, Any], *, allow_token_clear: bool) -> vol.Schema:
     """Build a localized form schema with current non-secret values."""
     schema: dict[vol.Marker, Any] = {
         vol.Optional(CONF_GITHUB_TOKEN, default=""): TextSelector(
@@ -46,6 +45,10 @@ def _settings_schema(
             CONF_NOTIFY_SERVICE,
             default=current[CONF_NOTIFY_SERVICE],
         ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+        vol.Optional(
+            CONF_EXCLUDED_REPOSITORIES,
+            default="\n".join(current[CONF_EXCLUDED_REPOSITORIES]),
+        ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)),
         vol.Required(
             CONF_DAILY_HOUR,
             default=current[CONF_DAILY_HOUR],
@@ -80,9 +83,7 @@ def _settings_schema(
         ),
     }
     if allow_token_clear:
-        schema[vol.Optional(CONF_CLEAR_GITHUB_TOKEN, default=False)] = (
-            BooleanSelector()
-        )
+        schema[vol.Optional(CONF_CLEAR_GITHUB_TOKEN, default=False)] = BooleanSelector()
     return vol.Schema(schema)
 
 
@@ -112,14 +113,10 @@ class AuditorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_settings_schema(
-                normalize_settings(), allow_token_clear=False
-            ),
+            data_schema=_settings_schema(normalize_settings(), allow_token_clear=False),
         )
 
-    async def async_step_import(
-        self, import_data: dict[str, Any]
-    ) -> ConfigFlowResult:
+    async def async_step_import(self, import_data: dict[str, Any]) -> ConfigFlowResult:
         """Import a legacy YAML configuration once."""
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
@@ -137,9 +134,7 @@ class AuditorOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage HA Auditor options."""
-        current = normalize_settings(
-            self.config_entry.data, self.config_entry.options
-        )
+        current = normalize_settings(self.config_entry.data, self.config_entry.options)
         if user_input is not None:
             clear_token = bool(user_input.pop(CONF_CLEAR_GITHUB_TOKEN, False))
             new_token = str(user_input.pop(CONF_GITHUB_TOKEN, "") or "").strip()

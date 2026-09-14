@@ -8,15 +8,17 @@
         "data": {
           "github_token": "GitHub-токен",
           "notify_service": "Дія сповіщення",
+          "excluded_repositories": "Виключені репозиторії",
           "daily_hour": "Година щоденного аудиту",
           "weekly_weekday": "День тижневого дайджесту",
-          "max_requests_per_run": "Репозиторіїв за запуск без авторизації"
+          "max_requests_per_run": "Бюджет GitHub-запитів без авторизації"
         },
         "data_description": {
           "github_token": "Необов'язковий токен лише для читання. Він збільшує ліміт API та дозволяє повний аудит за один запуск.",
           "notify_service": "Необов'язкова дія, наприклад notify.mobile_app_your_phone. Залиште порожньою, щоб вимкнути push-сповіщення.",
+          "excluded_repositories": "Необов'язкові GitHub-репозиторії, які треба пропускати: по одному owner/repository у рядку.",
           "daily_hour": "Локальна година від 0 до 23. Аудит починається через 15 хвилин після її початку.",
-          "max_requests_per_run": "Розмір порції, якщо GitHub-токен не налаштований."
+          "max_requests_per_run": "Максимальний бюджет API-запитів без токена. Метадані, Releases і резервна перевірка Tags можуть використати до трьох запитів на репозиторій."
         }
       }
     },
@@ -33,15 +35,17 @@
           "github_token": "Новий GitHub-токен",
           "clear_github_token": "Видалити збережений GitHub-токен",
           "notify_service": "Дія сповіщення",
+          "excluded_repositories": "Виключені репозиторії",
           "daily_hour": "Година щоденного аудиту",
           "weekly_weekday": "День тижневого дайджесту",
-          "max_requests_per_run": "Репозиторіїв за запуск без авторизації"
+          "max_requests_per_run": "Бюджет GitHub-запитів без авторизації"
         },
         "data_description": {
           "github_token": "Необов'язково. Введіть значення лише для заміни збереженого токена.",
           "notify_service": "Дія на кшталт notify.mobile_app_your_phone. Залиште порожньою, щоб вимкнути push-сповіщення.",
+          "excluded_repositories": "Необов'язкові GitHub-репозиторії, які треба пропускати: по одному owner/repository у рядку.",
           "daily_hour": "Локальна година від 0 до 23. Аудит починається через 15 хвилин після її початку.",
-          "max_requests_per_run": "Розмір порції, якщо GitHub-токен не налаштований."
+          "max_requests_per_run": "Максимальний бюджет API-запитів без токена. Метадані, Releases і резервна перевірка Tags можуть використати до трьох запитів на репозиторій."
         }
       }
     }
@@ -61,6 +65,92 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "not_configured": {
+      "message": "HA Auditor не налаштовано. Додайте його через Налаштування > Пристрої та служби."
+    }
+  },
+  "issues": {
+    "github_token_invalid": {
+      "title": "GitHub-токен недійсний або прострочений",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Замініть GitHub-токен",
+            "description": "GitHub відхилив налаштований токен. Введіть новий токен. Перед збереженням його буде перевірено.",
+            "data": {
+              "github_token": "Новий GitHub-токен"
+            },
+            "data_description": {
+              "github_token": "Використовуйте токен лише для читання. HA Auditor не показує і не записує це значення в журнал."
+            }
+          }
+        },
+        "error": {
+          "invalid_auth": "GitHub відхилив цей токен.",
+          "cannot_connect": "Не вдалося підключитися до GitHub. Спробуйте пізніше."
+        },
+        "abort": {
+          "entry_missing": "Запис конфігурації HA Auditor більше не існує."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "new_releases": {
+        "name": "Нові релізи"
+      }
+    },
+    "binary_sensor": {
+      "attention_required": {
+        "name": "Потрібна увага"
+      }
+    },
+    "button": {
+      "run_audit": {
+        "name": "Запустити аудит зараз"
+      }
+    }
+  },
+  "common": {
+    "assessment_critical": "Можлива несумісність: у примітках до релізу є «{matched_term}».",
+    "assessment_important": "Варто прочитати перед оновленням: знайдено «{matched_term}».",
+    "assessment_feature": "Нова можливість: знайдено «{matched_term}».",
+    "assessment_minor": "Звичайний реліз без ключових сигналів ризику.",
+    "release_not_found": "Не знайдено GitHub Release, що відповідає доступній версії.",
+    "not_checked": "Цю версію ще не перевірено в поточному циклі.",
+    "release_status_found": "Примітки до релізу знайдено",
+    "release_status_not_found": "Примітки до релізу не знайдено",
+    "release_status_not_checked": "Примітки до релізу ще не перевірено",
+    "release_status_tag_found": "Знайдено GitHub-тег; примітки до релізу відсутні",
+    "tag_fallback_reason": "Для цієї версії немає GitHub Release. Версію зіставлено за GitHub-тегом.",
+    "repository_status_archived": "Репозиторій архівовано",
+    "repository_status_abandoned": "У репозиторії немає активності понад два роки",
+    "error_authentication_401": "GitHub відхилив токен (401). Перевірте або замініть його.",
+    "error_rate_limit": "Ліміт запитів GitHub вичерпано; скидання: {reset}",
+    "error_authentication_403": "GitHub заборонив доступ (403). Перевірте права токена.",
+    "error_repository_not_found": "Репозиторій {repository} не знайдено або він недоступний.",
+    "error_github_status": "GitHub тимчасово недоступний (HTTP {status}).",
+    "error_timeout": "Час очікування під час перевірки {repository} вичерпано.",
+    "error_network": "Помилка мережі або відповіді GitHub: {error}",
+    "new_release": "Новий реліз",
+    "unknown_component": "Невідомий компонент",
+    "notification_title": "Аудит кастомних компонентів",
+    "notification_heading": "🧩 Аудит кастомних компонентів",
+    "notification_checked": "Перевірено: {checked} із {targeted} запланованих ({total} загалом)",
+    "notification_critical": "🔴 Критичні: {count}",
+    "notification_important": "🟠 Важливі: {count}",
+    "notification_feature": "🔵 Нові можливості: {count}",
+    "notification_minor": "⚪ Незначні: {count}",
+    "notification_updates_available": "⬆️ Доступно оновлень: {count}",
+    "notification_stale": "🕰️ Без релізів понад рік: {count}",
+    "notification_archived": "📦 Архівовані репозиторії: {count}",
+    "notification_abandoned": "💤 Репозиторії без активності понад два роки: {count}",
+    "notification_partial": "⚠️ Перевірку завершено частково. Результат не є повним.",
+    "notification_review": "Варто переглянути:",
+    "notification_no_new_releases": "Нових релізів від попередньої перевірки немає."
   },
   "selector": {
     "audit_mode": {

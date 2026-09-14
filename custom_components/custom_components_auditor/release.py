@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)]\([^)]+\)")
 MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
@@ -83,15 +86,24 @@ def classify_release_details(text: str) -> tuple[str, str]:
     return "minor", ""
 
 
-def classification_reason(severity: str, matched_term: str) -> str:
+def localize(messages: Mapping[str, str], key: str, **placeholders: Any) -> str:
+    """Format a translated message while failing safely on a broken locale."""
+    template = str(messages.get(key, key))
+    try:
+        return template.format(**placeholders)
+    except (KeyError, ValueError):
+        return key
+
+
+def classification_reason(
+    severity: str, matched_term: str, messages: Mapping[str, str]
+) -> str:
     """Explain a deterministic classification without overstating certainty."""
-    if severity == "critical":
-        return f"Можлива несумісність: у release notes є «{matched_term}»."
-    if severity == "important":
-        return f"Варто прочитати перед оновленням: знайдено «{matched_term}»."
-    if severity == "feature":
-        return f"Нова можливість: знайдено «{matched_term}»."
-    return "Звичайний реліз без ключових сигналів ризику."
+    return localize(
+        messages,
+        f"assessment_{severity}",
+        matched_term=matched_term,
+    )
 
 
 def summarize_release(body: str) -> str:
@@ -108,6 +120,153 @@ def summarize_release(body: str) -> str:
             break
     summary = "; ".join(candidates)
     return summary[:280].rstrip(" ;,.") + ("…" if len(summary) > 280 else "")
+
+
+def normalize_release_version(value: Any) -> str:
+    """Normalize common GitHub tag prefixes without guessing version semantics."""
+    normalized = str(value or "").strip().casefold()
+    if normalized.startswith("refs/tags/"):
+        normalized = normalized.removeprefix("refs/tags/")
+    if normalized.startswith("release-"):
+        normalized = normalized.removeprefix("release-")
+    if normalized.startswith("v") and len(normalized) > 1 and normalized[1].isdigit():
+        normalized = normalized[1:]
+    return normalized
+
+
+def find_release_for_version(
+    releases: list[dict[str, Any]], version: Any
+) -> dict[str, Any] | None:
+    """Find the GitHub release that matches a HACS latest version."""
+    target = normalize_release_version(version)
+    if not target:
+        return None
+    for release in releases:
+        if normalize_release_version(release.get("tag_name")) == target:
+            return release
+    return None
+
+
+def tags_as_release_candidates(
+    repository: str, tags: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Convert GitHub tags into the release-shaped records used by the auditor."""
+    candidates: list[dict[str, Any]] = []
+    for tag in tags:
+        name = str(tag.get("name") or "").strip()
+        if not name:
+            continue
+        commit = tag.get("commit") if isinstance(tag.get("commit"), Mapping) else {}
+        sha = str(commit.get("sha") or "")
+        candidates.append(
+            {
+                "id": f"tag:{name}:{sha}",
+                "tag_name": name,
+                "name": name,
+                "body": "",
+                "draft": False,
+                "prerelease": False,
+                "source": "tag",
+                "html_url": (
+                    f"https://github.com/{repository}/tree/{quote(name, safe='')}"
+                ),
+                "published_at": "",
+            }
+        )
+    return candidates
+
+
+def assess_repository_health(
+    metadata: Mapping[str, Any],
+    now: datetime,
+    abandoned_days: int,
+) -> dict[str, Any]:
+    """Classify repository maintenance health from GitHub metadata."""
+    pushed_at = str(metadata.get("pushed_at") or "")
+    days_since_push: int | None = None
+    if pushed_at:
+        try:
+            parsed = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            current = now if now.tzinfo is not None else now.replace(tzinfo=UTC)
+            days_since_push = max((current - parsed).days, 0)
+        except ValueError:
+            days_since_push = None
+
+    archived = bool(metadata.get("archived"))
+    if archived:
+        status = "archived"
+    elif days_since_push is not None and days_since_push >= abandoned_days:
+        status = "abandoned"
+    elif days_since_push is not None:
+        status = "active"
+    else:
+        status = "unknown"
+    return {
+        "status": status,
+        "archived": archived,
+        "pushed_at": pushed_at,
+        "days_since_push": days_since_push,
+        "url": str(metadata.get("html_url") or ""),
+    }
+
+
+def assess_available_update(
+    repository: dict[str, Any],
+    releases: list[dict[str, Any]],
+    messages: Mapping[str, str],
+) -> dict[str, Any]:
+    """Build an actionable assessment for the version currently offered by HACS."""
+    latest_version = str(repository.get("latest_version") or "")
+    base = {
+        "repository": str(repository.get("repository") or ""),
+        "component": str(repository.get("title") or repository.get("repository") or ""),
+        "entity_id": str(repository.get("entity_id") or ""),
+        "installed_version": str(repository.get("installed_version") or ""),
+        "latest_version": latest_version,
+    }
+    release = find_release_for_version(releases, latest_version)
+    if release is None:
+        return {
+            **base,
+            "release_status": "not_found",
+            "release_status_label": localize(messages, "release_status_not_found"),
+            "severity": "unknown",
+            "reason": localize(messages, "release_not_found"),
+            "matched_term": "",
+            "summary": "",
+            "url": str(repository.get("release_url") or ""),
+            "published_at": "",
+        }
+
+    title = str(release.get("name") or release.get("tag_name") or latest_version)
+    body = str(release.get("body") or "")
+    release_source = str(release.get("source") or "release")
+    if release_source == "tag":
+        severity, matched_term = "unknown", ""
+        reason = localize(messages, "tag_fallback_reason")
+        summary = ""
+        status_label = localize(messages, "release_status_tag_found")
+    else:
+        severity, matched_term = classify_release_details(f"{title}\n{body}")
+        reason = classification_reason(severity, matched_term, messages)
+        summary = summarize_release(body)
+        status_label = localize(messages, "release_status_found")
+    return {
+        **base,
+        "release_status": "found",
+        "release_status_label": status_label,
+        "release_source": release_source,
+        "severity": severity,
+        "reason": reason,
+        "matched_term": matched_term,
+        "summary": summary,
+        "url": str(release.get("html_url") or repository.get("release_url") or ""),
+        "published_at": str(
+            release.get("published_at") or release.get("created_at") or ""
+        ),
+    }
 
 
 def merge_changes(

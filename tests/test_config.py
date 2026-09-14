@@ -10,9 +10,7 @@ from pathlib import Path
 import pytest
 
 INTEGRATION = (
-    Path(__file__).parents[1]
-    / "custom_components"
-    / "custom_components_auditor"
+    Path(__file__).parents[1] / "custom_components" / "custom_components_auditor"
 )
 PACKAGE_NAME = "auditor_config_test"
 package = types.ModuleType(PACKAGE_NAME)
@@ -34,6 +32,7 @@ config = _load_module(f"{PACKAGE_NAME}.config", INTEGRATION / "config.py")
 
 normalize_settings = config.normalize_settings
 CONF_DAILY_HOUR = const.CONF_DAILY_HOUR
+CONF_EXCLUDED_REPOSITORIES = const.CONF_EXCLUDED_REPOSITORIES
 CONF_GITHUB_TOKEN = const.CONF_GITHUB_TOKEN
 CONF_MAX_REQUESTS = const.CONF_MAX_REQUESTS
 CONF_NOTIFY_SERVICE = const.CONF_NOTIFY_SERVICE
@@ -49,6 +48,7 @@ def test_normalize_settings_supplies_ui_defaults() -> None:
         CONF_DAILY_HOUR: 9,
         CONF_WEEKLY_WEEKDAY: 6,
         CONF_MAX_REQUESTS: 45,
+        CONF_EXCLUDED_REPOSITORIES: [],
     }
 
 
@@ -75,6 +75,21 @@ def test_options_override_entry_data_and_values_are_normalized() -> None:
     assert settings[CONF_MAX_REQUESTS] == 80
 
 
+def test_excluded_repositories_are_normalized_and_deduplicated() -> None:
+    settings = normalize_settings(
+        {
+            CONF_EXCLUDED_REPOSITORIES: (
+                "Owner/Repo.GIT\nowner/repo, Another/Integration "
+            )
+        }
+    )
+
+    assert settings[CONF_EXCLUDED_REPOSITORIES] == [
+        "another/integration",
+        "owner/repo",
+    ]
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     [
@@ -86,8 +101,6 @@ def test_options_override_entry_data_and_values_are_normalized() -> None:
         (CONF_MAX_REQUESTS, 501),
     ],
 )
-def test_normalize_settings_rejects_out_of_range_values(
-    key: str, value: int
-) -> None:
+def test_normalize_settings_rejects_out_of_range_values(key: str, value: int) -> None:
     with pytest.raises(ValueError):
         normalize_settings({key: value})
