@@ -1,102 +1,96 @@
-# HA Auditor for Home Assistant
+<p align="center">
+  <img src="brand/icon.png" alt="HA Auditor" width="180">
+</p>
 
-[![English](https://img.shields.io/badge/lang-English-blue)](README.md)
-[![Українська](https://img.shields.io/badge/lang-Українська-yellow)](README.uk.md)
-[![Validate](https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml/badge.svg)](https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<h1 align="center">HA Auditor</h1>
 
-HA Auditor is a Home Assistant custom integration that checks GitHub Releases
-for installed HACS integrations and highlights release notes that may deserve
-attention before an update. It is configured from the Home Assistant UI; YAML
-is not required.
+<p align="center">Understand HACS updates before you install them.</p>
 
-It is designed to answer three practical questions:
+<p align="center">
+  <a href="README.md"><img src="https://img.shields.io/badge/lang-English-blue" alt="English"></a>
+  <a href="README.uk.md"><img src="https://img.shields.io/badge/lang-Українська-yellow" alt="Українська"></a>
+  <a href="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml"><img src="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+</p>
 
-1. Which HACS integrations have an update available?
-2. Which newly discovered releases may include breaking changes, important
-   fixes or new features?
-3. Did the audit finish completely, or was it limited by GitHub or the network?
+HA Auditor is a Home Assistant custom integration for monitoring updates to
+integrations installed through HACS. It reads GitHub Release notes, highlights
+changes that may deserve attention and clearly reports whether every repository
+was checked successfully.
 
-## What it does
+It helps you answer three questions before updating:
 
-- Discovers enabled `update.*` entities provided by HACS.
-- Creates a silent baseline on the first run, avoiding a flood of old releases.
-- Uses GitHub Releases and ETags to reduce unnecessary API traffic.
-- Separates currently available HACS updates from newly discovered releases.
-- Classifies release notes as critical, important, feature or minor using
-  deterministic keywords and exposes the matched reason.
-- Persists release checkpoints and a weekly digest queue in Home Assistant
-  storage.
-- Reports partial audits instead of presenting incomplete results as success.
-- Optionally sends immediate critical or important notifications and a weekly
-  digest.
+1. Which HACS integrations currently have updates available?
+2. Which releases mention breaking changes, important fixes or new features?
+3. Is the audit complete, or is part of the result missing because of a GitHub
+   or network error?
 
-It does not install updates, modify Home Assistant configuration or expose the
-GitHub token in sensor attributes.
+HA Auditor is read-only. It never installs updates or changes other
+integrations.
 
-## Important limitation
+## Highlights
 
-Release classification is a keyword-based hint. It is not a security audit and
-does not prove that an update is incompatible. Always read the linked release
-notes before installing a release marked critical or important.
-
-Repositories that publish only tags or commits, without GitHub Releases,
-cannot currently produce release-note alerts.
+- Finds enabled HACS integration update entities automatically.
+- Shows installed and available versions in one place.
+- Reads GitHub Releases and classifies newly discovered release notes as
+  critical, important, feature or minor.
+- Shows the keyword that caused each classification.
+- Uses a silent first-run baseline, so old releases are not reported as new.
+- Distinguishes `idle`, `running`, `partial` and `error` states.
+- Stores release checkpoints and the weekly digest queue across restarts.
+- Supports optional immediate notifications and a weekly digest.
+- Uses GitHub ETags to avoid unnecessary API traffic.
+- Provides English and Ukrainian setup screens and action descriptions.
 
 ## Installation
 
 ### HACS custom repository
 
-1. Open HACS in Home Assistant.
-2. Add `https://github.com/rodion981/ha-auditor` as a custom repository with
-   category **Integration**.
-3. Install **HA Auditor**.
-4. Restart Home Assistant.
-5. Open **Settings → Devices & services → Add integration**.
-6. Search for **HA Auditor** and complete the setup form.
+1. Open **HACS** in Home Assistant.
+2. Open the menu and select **Custom repositories**.
+3. Add `https://github.com/rodion981/ha-auditor` with category
+   **Integration**.
+4. Open **HA Auditor** and select **Download**.
+5. Restart Home Assistant.
+6. Open **Settings > Devices & services > Add integration**.
+7. Search for **HA Auditor** and complete the setup form.
 
 ### Manual installation
 
-Copy the directory:
-
-```text
-custom_components/custom_components_auditor
-```
-
-to the same path inside the Home Assistant configuration directory, then
-restart Home Assistant.
+Copy `custom_components/custom_components_auditor` into the
+`custom_components` directory of your Home Assistant configuration, restart
+Home Assistant and add **HA Auditor** from **Devices & services**.
 
 ## Configuration
 
-All settings are available in the integration setup form. To change them later,
-open **Settings → Devices & services → HA Auditor → Configure**.
+All settings are managed from **Settings > Devices & services > HA Auditor >
+Configure**.
 
-- **GitHub token** is optional. A read-only token increases the API limit and
-  lets `full` mode check every discovered repository in one run.
-- **Notification action** is optional. Use an action such as
-  `notify.mobile_app_your_phone`, or leave it empty to disable push
-  notifications.
-- **Daily audit hour** uses local Home Assistant time. The job starts at minute
-  15 of the selected hour.
-- **Weekly digest day** is selected by name in the UI.
-- **Repositories per unauthenticated run** controls the batch size when no
-  token is configured.
+| Setting | Purpose |
+| --- | --- |
+| GitHub token | Optional read-only token that raises the API limit and lets a full audit check every discovered repository in one run. |
+| Notification action | Optional Home Assistant notification action, for example `notify.mobile_app_your_phone`. Leave it empty to disable push notifications. |
+| Daily audit hour | Local Home Assistant hour when the scheduled audit starts. The audit runs at minute 15. |
+| Weekly digest day | Day on which the scheduled audit also sends the accumulated digest. |
+| Repositories per unauthenticated run | Batch size used when no GitHub token is configured. |
 
-The saved token is not displayed in sensor attributes. In the options form,
-leave the token field empty to keep it, enter a new value to replace it, or use
-the removal switch to delete it.
-
-### Upgrading from the YAML version
-
-Existing `custom_components_auditor:` YAML is imported automatically into a UI
-config entry once. After **HA Auditor** appears under Devices & services,
-remove that YAML block and its unused secret, then restart Home Assistant.
-The legacy example remains in
-[`examples/configuration.yaml`](examples/configuration.yaml) only for migration.
+The saved token is never exposed in sensor attributes. In the options form,
+leave the token field empty to keep the current token, enter another token to
+replace it or enable the removal switch to delete it.
 
 ## Running an audit
 
-The integration registers this Home Assistant action:
+Scheduled audits run automatically. To run one manually, open **Developer
+tools > Actions**, select `custom_components_auditor.run_audit` and choose a
+mode:
+
+| Mode | Behaviour |
+| --- | --- |
+| `daily` | Checks the next configured batch of repositories. |
+| `full` | Checks every repository when a token is configured; otherwise checks one batch. |
+| `digest` | Checks repositories and sends the accumulated weekly digest. |
+
+Example action call:
 
 ```yaml
 action: custom_components_auditor.run_audit
@@ -105,39 +99,66 @@ data:
   notify: false
 ```
 
-Available modes:
-
-- `daily`: check the next configured batch;
-- `full`: check all repositories when authenticated, otherwise one batch;
-- `digest`: check repositories and send the accumulated weekly digest.
-
-The scheduled audit runs at minute 15 of the selected hour. On the selected
-weekly digest day, it runs in digest mode.
+Set `notify: false` when you want to refresh the sensor without sending
+immediate notifications.
 
 ## Understanding the result
 
-The integration publishes `sensor.custom_components_auditor`.
+The integration creates `sensor.custom_components_auditor`.
 
-- `status`: `idle`, `running`, `partial` or `error`;
-- `last_attempt`: when the most recent audit was started;
-- `last_successful_audit`: the latest fully successful audit;
-- `total_components`: all discovered HACS integrations;
-- `targeted_this_run`: repositories selected for this run;
-- `checked_this_run`: repositories successfully checked;
-- `updates_available` and `available_updates`: updates currently offered by
-  HACS;
-- `critical`, `important`, `new_features` and `minor`: newly detected releases
-  grouped by classification;
-- `last_run_changes`: new releases found during the latest run;
-- `pending_digest_changes`: releases waiting for the weekly digest;
-- `error_details`: failures grouped by type;
-- `github_rate_remaining`: remaining GitHub API quota when available.
+| Attribute | Meaning |
+| --- | --- |
+| `status` | Current state: `idle`, `running`, `partial` or `error`. |
+| `last_attempt` | Time when the latest audit started. |
+| `last_successful_audit` | Time of the latest fully successful audit. |
+| `total_components` | Number of discovered HACS integrations. |
+| `targeted_this_run` | Repositories selected for the latest run. |
+| `checked_this_run` | Repositories checked successfully. |
+| `updates_available` | Number of updates currently offered by HACS. |
+| `available_updates` | Installed and latest versions of those updates. |
+| `critical`, `important`, `new_features`, `minor` | Newly detected releases grouped by classification. |
+| `last_run_changes` | Releases discovered during the latest run. |
+| `pending_digest_changes` | Releases waiting for the weekly digest. |
+| `error_details` | Failed checks grouped by error type. |
+| `github_rate_remaining` | Remaining GitHub API quota when available. |
 
-`partial` means that at least one targeted repository was not checked. Treat
-the result as incomplete and use `error_details` to find the reason.
+`partial` means at least one selected repository was not checked. The result is
+incomplete, so review `error_details` before relying on it.
 
-A native dashboard example is available in
+A ready-to-use native card is available in
 [`examples/dashboard.yaml`](examples/dashboard.yaml).
+
+## How it works
+
+On the first successful run, HA Auditor saves the latest known release for each
+repository without creating old alerts. Later runs compare GitHub Releases with
+that baseline, store new findings and update the sensor. Checkpoints and pending
+digest entries are preserved in Home Assistant storage.
+
+Available HACS updates and newly published GitHub releases are intentionally
+reported separately. An integration can have an available update without that
+release being new to the auditor.
+
+## Limitations
+
+- Classification is a deterministic keyword-based hint, not a security audit
+  and not proof that an update is incompatible.
+- Always read the linked release notes before installing an update marked
+  critical or important.
+- Repositories that publish only tags or commits without GitHub Releases cannot
+  produce release-note alerts.
+- GitHub's unauthenticated API limit is lower, so larger installations should
+  use a read-only token or process repositories in batches.
+
+## Privacy and security
+
+HA Auditor runs inside Home Assistant and contacts the GitHub API for public
+repository and release information. It does not install updates, modify other
+integrations or expose the saved token in its sensor. Notifications are sent
+only through the Home Assistant action explicitly configured by the user.
+
+Do not include tokens, Home Assistant configuration, `.storage` data or
+notification payloads in public issues. See [`SECURITY.md`](SECURITY.md).
 
 ## Development
 
@@ -148,16 +169,9 @@ ruff check custom_components tests
 pytest
 ```
 
-The unit suite covers release classification, negated breaking-change phrases,
-summary sanitization, change deduplication, repository metadata and a small
-publication secret scan. Home Assistant runtime and clean-instance HACS tests
-remain separate release gates.
-
-## Security
-
-Use only the permissions your GitHub token needs. Do not include tokens, Home
-Assistant configuration, `.storage` data or notification payloads in public
-issues. See [`SECURITY.md`](SECURITY.md).
+The automated suite covers release classification, negated breaking-change
+phrases, summary sanitization, deduplication, configuration handling,
+translations, repository metadata and a basic secret scan.
 
 ## License
 

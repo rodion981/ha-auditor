@@ -2,9 +2,8 @@
 
 ## 1.1.0
 
-- Add UI setup through Settings > Devices & services; YAML is no longer needed.
+- Add UI setup through Settings > Devices & services.
 - Add a localized options flow for token, notifications and schedule settings.
-- Import an existing YAML configuration into a single UI config entry.
 - Cleanly cancel audit timers and listeners when the entry is reloaded or removed.
 - Distinguish a successful audit from a partial audit.
 - Publish attempted, targeted and successfully checked repository counts.
