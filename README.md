@@ -5,9 +5,10 @@
 [![Validate](https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml/badge.svg)](https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-HA Auditor is a YAML-configured Home Assistant custom integration that checks
-GitHub Releases for installed HACS integrations and highlights release notes
-that may deserve attention before an update.
+HA Auditor is a Home Assistant custom integration that checks GitHub Releases
+for installed HACS integrations and highlights release notes that may deserve
+attention before an update. It is configured from the Home Assistant UI; YAML
+is not required.
 
 It is designed to answer three practical questions:
 
@@ -51,7 +52,8 @@ cannot currently produce release-note alerts.
    category **Integration**.
 3. Install **HA Auditor**.
 4. Restart Home Assistant.
-5. Add the YAML configuration shown below and restart once more.
+5. Open **Settings → Devices & services → Add integration**.
+6. Search for **HA Auditor** and complete the setup form.
 
 ### Manual installation
 
@@ -66,28 +68,31 @@ restart Home Assistant.
 
 ## Configuration
 
-For a full audit in one run, place a read-only GitHub token in `secrets.yaml`:
+All settings are available in the integration setup form. To change them later,
+open **Settings → Devices & services → HA Auditor → Configure**.
 
-```yaml
-custom_components_auditor_github_token: YOUR_GITHUB_TOKEN
-```
+- **GitHub token** is optional. A read-only token increases the API limit and
+  lets `full` mode check every discovered repository in one run.
+- **Notification action** is optional. Use an action such as
+  `notify.mobile_app_your_phone`, or leave it empty to disable push
+  notifications.
+- **Daily audit hour** uses local Home Assistant time. The job starts at minute
+  15 of the selected hour.
+- **Weekly digest day** is selected by name in the UI.
+- **Repositories per unauthenticated run** controls the batch size when no
+  token is configured.
 
-Reference it from `configuration.yaml`:
+The saved token is not displayed in sensor attributes. In the options form,
+leave the token field empty to keep it, enter a new value to replace it, or use
+the removal switch to delete it.
 
-```yaml
-custom_components_auditor:
-  github_token: !secret custom_components_auditor_github_token
-  notify_service: notify.mobile_app_your_phone
-  daily_hour: 9
-  weekly_weekday: 6
-  max_requests_per_run: 45
-```
+### Upgrading from the YAML version
 
-`notify_service` is optional. Omit it to disable push notifications. Without a
-GitHub token, the integration checks at most `max_requests_per_run`
-repositories and resumes with the next repository during the next run.
-
-Never commit `secrets.yaml` or a live token.
+Existing `custom_components_auditor:` YAML is imported automatically into a UI
+config entry once. After **HA Auditor** appears under Devices & services,
+remove that YAML block and its unused secret, then restart Home Assistant.
+The legacy example remains in
+[`examples/configuration.yaml`](examples/configuration.yaml) only for migration.
 
 ## Running an audit
 
@@ -106,9 +111,8 @@ Available modes:
 - `full`: check all repositories when authenticated, otherwise one batch;
 - `digest`: check repositories and send the accumulated weekly digest.
 
-The scheduled audit runs at minute 15 of `daily_hour`. On `weekly_weekday`, it
-runs in digest mode. Python weekday numbers are used: Monday is `0`, Sunday is
-`6`.
+The scheduled audit runs at minute 15 of the selected hour. On the selected
+weekly digest day, it runs in digest mode.
 
 ## Understanding the result
 

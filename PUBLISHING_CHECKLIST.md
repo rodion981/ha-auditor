@@ -19,7 +19,9 @@ Release preparation for `rodion981/ha-auditor`.
 
 ## Validation and release
 
-- [x] Run the final local validation suite: compile, Ruff and 23 pytest tests.
+- [x] Run the final local validation suite: compile, Ruff and 33 pytest tests.
+- [ ] Confirm the hassfest job passes on the public branch.
+- [ ] Validate UI setup, options reload and legacy YAML import in Home Assistant.
 - [ ] Install the repository as a HACS custom repository in a clean test Home
       Assistant instance.
 - [ ] Validate first-run baseline, a second audit and one simulated failure.
