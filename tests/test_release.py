@@ -138,7 +138,7 @@ def test_available_update_is_assessed_on_the_first_audit() -> None:
     assert assessment["matched_term"] == "security"
     assert assessment["latest_version"] == "1.1.0"
     assert assessment["summary"] == "Security fix for authentication handling"
-    assert assessment["reason"] == "Read before updating: found 'security'."
+    assert assessment["reason"] == "Read before updating, found: security."
 
 
 def test_available_update_reports_missing_matching_release() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 from string import Formatter
 
@@ -150,6 +151,18 @@ def test_translation_contribution_guide_is_present() -> None:
 
     assert "translations/<language_code>.json" in guide
     assert "{matched_term}" in guide
+
+
+def test_translation_placeholders_are_not_wrapped_in_quotes() -> None:
+    """Mirror hassfest's placeholder quoting rule for local validation."""
+    quoted_placeholder = re.compile(r"['‘’«»]\{[^}]+\}['‘’«»]")
+
+    for path in (
+        INTEGRATION / "strings.json",
+        INTEGRATION / "translations" / "en.json",
+        INTEGRATION / "translations" / "uk.json",
+    ):
+        assert quoted_placeholder.search(path.read_text(encoding="utf-8")) is None
 
 
 def test_mit_license_is_present() -> None:

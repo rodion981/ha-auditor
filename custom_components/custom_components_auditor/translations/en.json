@@ -115,9 +115,9 @@
     }
   },
   "common": {
-    "assessment_critical": "Possible incompatibility: release notes contain '{matched_term}'.",
-    "assessment_important": "Read before updating: found '{matched_term}'.",
-    "assessment_feature": "New capability: found '{matched_term}'.",
+    "assessment_critical": "Possible incompatibility: release notes contain: {matched_term}.",
+    "assessment_important": "Read before updating, found: {matched_term}.",
+    "assessment_feature": "New capability found: {matched_term}.",
     "assessment_minor": "Regular release without a keyword-based risk signal.",
     "release_not_found": "No GitHub Release matches the available version.",
     "not_checked": "This version has not been checked in the current cycle.",

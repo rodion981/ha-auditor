@@ -115,9 +115,9 @@
     }
   },
   "common": {
-    "assessment_critical": "Можлива несумісність: у примітках до релізу є «{matched_term}».",
-    "assessment_important": "Варто прочитати перед оновленням: знайдено «{matched_term}».",
-    "assessment_feature": "Нова можливість: знайдено «{matched_term}».",
+    "assessment_critical": "Можлива несумісність, у примітках до релізу знайдено: {matched_term}.",
+    "assessment_important": "Варто прочитати перед оновленням, знайдено: {matched_term}.",
+    "assessment_feature": "Знайдено нову можливість: {matched_term}.",
     "assessment_minor": "Звичайний реліз без ключових сигналів ризику.",
     "release_not_found": "Не знайдено GitHub Release, що відповідає доступній версії.",
     "not_checked": "Цю версію ще не перевірено в поточному циклі.",
