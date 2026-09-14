@@ -1,0 +1,7 @@
+{
+  "services": {
+    "run_audit": {
+      "service": "mdi:refresh"
+    }
+  }
+}

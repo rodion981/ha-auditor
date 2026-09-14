@@ -2,7 +2,7 @@
   "domain": "custom_components_auditor",
   "name": "HA Auditor",
   "codeowners": ["@rodion981"],
-  "config_flow": false,
+  "config_flow": true,
   "documentation": "https://github.com/rodion981/ha-auditor",
   "integration_type": "service",
   "iot_class": "cloud_polling",

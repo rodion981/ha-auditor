@@ -1,0 +1,85 @@
+{
+  "title": "HA Auditor",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure the release audit",
+        "description": "The GitHub token and notification action are optional. Without a token, repositories are checked in batches.",
+        "data": {
+          "github_token": "GitHub token",
+          "notify_service": "Notification action",
+          "daily_hour": "Daily audit hour",
+          "weekly_weekday": "Weekly digest day",
+          "max_requests_per_run": "Repositories per unauthenticated run"
+        },
+        "data_description": {
+          "github_token": "Optional read-only token. It increases the API limit and allows a full audit in one run.",
+          "notify_service": "Optional action such as notify.mobile_app_your_phone. Leave empty to disable push notifications.",
+          "daily_hour": "Local hour from 0 to 23. The audit starts at 15 minutes past the hour.",
+          "max_requests_per_run": "Batch size used when no GitHub token is configured."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "HA Auditor is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Audit settings",
+        "description": "Leave the token field empty to keep the current token. Enable token removal only when you want to delete it.",
+        "data": {
+          "github_token": "New GitHub token",
+          "clear_github_token": "Remove the saved GitHub token",
+          "notify_service": "Notification action",
+          "daily_hour": "Daily audit hour",
+          "weekly_weekday": "Weekly digest day",
+          "max_requests_per_run": "Repositories per unauthenticated run"
+        },
+        "data_description": {
+          "github_token": "Optional. Enter a value only to replace the saved token.",
+          "notify_service": "Action such as notify.mobile_app_your_phone. Leave empty to disable push notifications.",
+          "daily_hour": "Local hour from 0 to 23. The audit starts at 15 minutes past the hour.",
+          "max_requests_per_run": "Batch size used when no GitHub token is configured."
+        }
+      }
+    }
+  },
+  "services": {
+    "run_audit": {
+      "name": "Run custom component audit",
+      "description": "Checks GitHub releases for integrations installed through HACS.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "Daily checks the next batch, full checks every possible repository, and digest also sends the accumulated summary."
+        },
+        "notify": {
+          "name": "Send notification",
+          "description": "Send important results through the configured notification action."
+        }
+      }
+    }
+  },
+  "selector": {
+    "audit_mode": {
+      "options": {
+        "daily": "Daily batch",
+        "full": "Full audit",
+        "digest": "Audit and digest"
+      }
+    },
+    "weekday": {
+      "options": {
+        "0": "Monday",
+        "1": "Tuesday",
+        "2": "Wednesday",
+        "3": "Thursday",
+        "4": "Friday",
+        "5": "Saturday",
+        "6": "Sunday"
+      }
+    }
+  }
+}

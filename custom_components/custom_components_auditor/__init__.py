@@ -10,8 +10,10 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -19,6 +21,7 @@ from homeassistant.helpers.event import async_call_later, async_track_time_chang
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .config import normalize_settings
 from .const import (
     CONF_DAILY_HOUR,
     CONF_GITHUB_TOKEN,
@@ -47,7 +50,7 @@ _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = vol.Schema(
     {
-        DOMAIN: vol.Schema(
+        vol.Optional(DOMAIN): vol.Schema(
             {
                 vol.Optional(CONF_GITHUB_TOKEN): cv.string,
                 vol.Optional(
@@ -78,45 +81,64 @@ SERVICE_SCHEMA = vol.Schema(
 GITHUB_REPOSITORY_RE = re.compile(
     r"^https?://github\.com/([^/]+)/([^/#?]+)", re.IGNORECASE
 )
+
+
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
-    """Set up the auditor from YAML."""
-    manager = ComponentsAuditor(hass, config.get(DOMAIN, {}))
-    await manager.async_initialize()
-    hass.data[DOMAIN] = manager
+    """Set up actions and import a legacy YAML configuration."""
+    managers: dict[str, ComponentsAuditor] = hass.data.setdefault(DOMAIN, {})
 
     async def handle_run(call: ServiceCall) -> None:
+        manager = next(iter(managers.values()), None)
+        if manager is None:
+            raise ServiceValidationError(
+                "HA Auditor is not configured. Add it from Settings > "
+                "Devices & services."
+            )
         await manager.async_run(call.data["mode"], call.data["notify"])
 
     hass.services.async_register(
         DOMAIN, SERVICE_RUN_AUDIT, handle_run, schema=SERVICE_SCHEMA
     )
 
-    @callback
-    def schedule_startup(_: Any) -> None:
-        if not manager.data.get("last_checked"):
-            async_call_later(
-                hass,
-                120,
-                lambda _now: hass.async_create_task(
-                    manager.async_run("daily", False), eager_start=True
-                ),
-            )
-
-    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, schedule_startup)
-
-    async def scheduled_audit(now: datetime) -> None:
-        local_now = dt_util.as_local(now)
-        weekly = local_now.weekday() == manager.weekly_weekday
-        await manager.async_run("digest" if weekly else "daily", True)
-
-    async_track_time_change(
-        hass,
-        scheduled_audit,
-        hour=manager.daily_hour,
-        minute=15,
-        second=0,
-    )
+    if yaml_config := config.get(DOMAIN):
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_IMPORT},
+                data=dict(yaml_config),
+            ),
+            eager_start=True,
+        )
     return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up HA Auditor from a UI config entry."""
+    settings = normalize_settings(entry.data, entry.options)
+    manager = ComponentsAuditor(hass, settings)
+    await manager.async_initialize()
+    manager.async_start_schedules()
+
+    managers: dict[str, ComponentsAuditor] = hass.data.setdefault(DOMAIN, {})
+    managers[entry.entry_id] = manager
+    manager.add_unsubscriber(entry.add_update_listener(_async_reload_entry))
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload HA Auditor and cancel all background callbacks."""
+    managers: dict[str, ComponentsAuditor] = hass.data.get(DOMAIN, {})
+    manager = managers.pop(entry.entry_id, None)
+    if manager is not None:
+        manager.async_shutdown()
+    if not managers:
+        hass.states.async_remove(SENSOR_ENTITY_ID)
+    return True
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload HA Auditor after its UI options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 class ComponentsAuditor:
@@ -132,6 +154,7 @@ class ComponentsAuditor:
         self.store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
         self.lock = asyncio.Lock()
         self.data: dict[str, Any] = {}
+        self._unsubscribers: list[Any] = []
 
     async def async_initialize(self) -> None:
         """Restore the previous checkpoint and publish the sensor."""
@@ -143,6 +166,56 @@ class ComponentsAuditor:
         self.data.setdefault("cursor", 0)
         self.data.setdefault("status", "idle")
         self._publish()
+
+    def add_unsubscriber(self, unsubscribe: Any) -> None:
+        """Track a callback that must be removed when the entry unloads."""
+        self._unsubscribers.append(unsubscribe)
+
+    def async_start_schedules(self) -> None:
+        """Start the delayed baseline and recurring audit schedules."""
+
+        @callback
+        def schedule_startup(_: Any = None) -> None:
+            if not self.data.get("last_checked"):
+                self.add_unsubscriber(
+                    async_call_later(
+                        self.hass,
+                        120,
+                        lambda _now: self.hass.async_create_task(
+                            self.async_run("daily", False), eager_start=True
+                        ),
+                    )
+                )
+
+        if self.hass.is_running:
+            schedule_startup()
+        else:
+            self.add_unsubscriber(
+                self.hass.bus.async_listen_once(
+                    EVENT_HOMEASSISTANT_STARTED, schedule_startup
+                )
+            )
+
+        async def scheduled_audit(now: datetime) -> None:
+            local_now = dt_util.as_local(now)
+            weekly = local_now.weekday() == self.weekly_weekday
+            await self.async_run("digest" if weekly else "daily", True)
+
+        self.add_unsubscriber(
+            async_track_time_change(
+                self.hass,
+                scheduled_audit,
+                hour=self.daily_hour,
+                minute=15,
+                second=0,
+            )
+        )
+
+    @callback
+    def async_shutdown(self) -> None:
+        """Cancel listeners and timers registered for this config entry."""
+        while self._unsubscribers:
+            self._unsubscribers.pop()()
 
     async def async_run(self, mode: str, notify: bool) -> None:
         """Run one audit without overlapping another run."""
