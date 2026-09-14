@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/icon.png" alt="HA Auditor" width="180">
+  <img src="custom_components/custom_components_auditor/brand/icon.png" alt="HA Auditor" width="180">
 </p>
 
 <h1 align="center">HA Auditor</h1>

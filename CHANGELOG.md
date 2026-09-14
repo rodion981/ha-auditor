@@ -3,6 +3,7 @@
 ## 1.1.0
 
 - Add UI setup through Settings > Devices & services.
+- Bundle the integration icon where Home Assistant can serve it locally.
 - Add a localized options flow for token, notifications and schedule settings.
 - Cleanly cancel audit timers and listeners when the entry is reloaded or removed.
 - Distinguish a successful audit from a partial audit.
