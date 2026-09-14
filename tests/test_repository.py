@@ -128,6 +128,15 @@ def test_service_icon_is_present() -> None:
     assert icons["services"]["run_audit"]["service"] == "mdi:refresh"
 
 
+def test_integration_brand_icon_is_packaged_locally() -> None:
+    icon = INTEGRATION / "brand" / "icon.png"
+    data = icon.read_bytes()
+
+    assert not (ROOT / "brand" / "icon.png").exists()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert int.from_bytes(data[16:20], "big") == int.from_bytes(data[20:24], "big")
+
+
 @pytest.mark.parametrize(
     "relative_path",
     [
