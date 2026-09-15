@@ -12,6 +12,10 @@ MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)]\([^)]+\)")
 MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
+RESOLVED_DEPRECATION_WARNING_RE = re.compile(
+    r"\b(?:fix(?:ed|es|ing)?|resolv(?:e|ed|es|ing)|silenc(?:e|ed|es|ing))\b"
+    r"[^\n.;]{0,100}\bdeprecat(?:ed|ion)?\s+warnings?\b"
+)
 
 CRITICAL_TERMS = (
     "breaking change",
@@ -34,8 +38,6 @@ IMPORTANT_TERMS = (
     "data loss",
     "important",
     "new service",
-    "new option",
-    "configuration option",
     "behavior change",
     "behaviour change",
     "minimum home assistant",
@@ -46,10 +48,14 @@ IMPORTANT_TERMS = (
 )
 FEATURE_TERMS = (
     "new feature",
+    "add support",
+    "adds support",
     "added support",
     "new sensor",
     "new entity",
     "new card",
+    "new option",
+    "configuration option",
     "introducing",
     "feature:",
     "feat:",
@@ -68,6 +74,7 @@ def classify_release(text: str) -> str:
 def classify_release_details(text: str) -> tuple[str, str]:
     """Classify release notes and return the term that caused the decision."""
     lowered = text.casefold()
+    lowered = RESOLVED_DEPRECATION_WARNING_RE.sub("", lowered)
     for harmless_phrase in (
         "no breaking changes",
         "without breaking changes",

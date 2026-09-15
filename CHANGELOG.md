@@ -1,7 +1,9 @@
 # Changelog
 
-## 1.3.0-beta.1
+## 1.3.0-beta.2
 
+- Calibrate release classification from live audit evidence: resolved deprecation
+  warnings no longer raise attention, and new options are categorized as features.
 - Add repository exclusions to the UI options flow.
 - Fall back to GitHub Tags when a repository has no Releases.
 - Detect archived repositories and repositories with no push for 730 days.

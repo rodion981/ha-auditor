@@ -37,6 +37,14 @@ MESSAGES = json.loads(
         ("BREAKING CHANGE: migrate the configuration", "critical"),
         ("Security fix for API authentication", "important"),
         ("New feature: added support for a sensor", "feature"),
+        ("New option for map centering", "feature"),
+        (
+            "Add support for a new device; fix concentration unit deprecation warnings",
+            "feature",
+        ),
+        ("Fix concentration unit deprecation warnings", "minor"),
+        ("Resolve API deprecation warning", "minor"),
+        ("Deprecated option will be removed in the next release", "important"),
         ("Maintenance release with dependency updates", "minor"),
     ],
 )
