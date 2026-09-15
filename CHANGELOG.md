@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0-beta.1
+
+- Add persistent actionable findings for critical and important updates,
+  archived repositories and long-inactive repositories.
+- Keep first seen, last seen, confirmations, recommendation and resolution
+  history for each finding across Home Assistant restarts.
+- Add `sensor.ha_auditor_active_findings` with bounded finding details.
+- Make `binary_sensor.ha_auditor_attention_required` represent active findings
+  only.
+- Add `binary_sensor.ha_auditor_audit_problem` for partial and failed audits.
+- Require two successful observations before reporting an inactive repository
+  and two clean checks before resolving a finding.
+- Preserve findings when a repository was deferred or skipped by a failed
+  GitHub request, and remove findings for excluded or removed repositories.
+- Send an immediate configured notification when a finding first activates,
+  without duplicating the same update in the release-review section.
+
 ## 1.3.0
 
 - Add repository exclusions to the UI options flow.

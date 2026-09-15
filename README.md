@@ -15,8 +15,9 @@
 
 HA Auditor is a Home Assistant custom integration for monitoring updates to
 integrations installed through HACS. It reads GitHub Release notes, highlights
-changes that may deserve attention and clearly reports whether every repository
-was checked successfully.
+changes that may deserve attention, keeps actionable findings until they are
+confirmed resolved and clearly reports whether every repository was checked
+successfully.
 
 It helps you answer three questions before updating:
 
@@ -35,6 +36,9 @@ integrations.
 - Classifies both currently available updates and newly discovered releases as
   critical, important, feature or minor.
 - Shows the keyword that caused each classification.
+- Keeps persistent findings with first/last seen time, confirmations,
+  recommendation and resolution history.
+- Separates component findings from GitHub or audit failures.
 - Uses a silent first-run baseline, so old releases are not reported as new.
 - Distinguishes `idle`, `running`, `partial` and `error` states.
 - Stores release checkpoints and the weekly digest queue across restarts.
@@ -107,12 +111,14 @@ immediate notifications.
 
 ## Understanding the result
 
-The integration creates three native Home Assistant entities:
+The integration creates five native Home Assistant entities:
 
 | Entity | Purpose |
 | --- | --- |
 | `sensor.custom_components_auditor` | Number of releases first seen during the latest audit, with full audit details in its attributes. |
-| `binary_sensor.ha_auditor_attention_required` | Turns on for critical or important updates, archived or abandoned repositories, partial audits and errors. |
+| `sensor.ha_auditor_active_findings` | Number of persistent actionable findings, with their lifecycle, recommendation and URL in attributes. |
+| `binary_sensor.ha_auditor_attention_required` | Turns on only while at least one actionable finding is active. |
+| `binary_sensor.ha_auditor_audit_problem` | Turns on when the latest audit is partial or failed. |
 | `button.ha_auditor_run_audit` | Runs the most complete audit allowed by the configured GitHub credentials without sending a push notification. |
 
 | Attribute | Meaning |
@@ -132,6 +138,14 @@ The integration creates three native Home Assistant entities:
 | `repository_health_details` | Repository status, last push date, inactive days and GitHub URL. |
 | `excluded_repositories` | Repositories skipped through the integration options. |
 | `attention_required` | Whether the current result needs user attention. |
+| `audit_problem` | Whether the latest audit is partial or failed. |
+| `active_finding_count` | Number of active actionable findings. |
+| `active_findings` | Repository, component, type, severity, first/last seen time, confirmations, recommendation and URL for each active finding. |
+| `finding_counts` | Active findings grouped by severity and source. |
+| `findings_pending_confirmation` | Potential inactive-repository findings waiting for another successful observation. |
+| `pending_findings` | Details of inactive-repository candidates waiting for confirmation. |
+| `recently_resolved_findings` | Findings confirmed absent by two clean checks and retained for 30 days. |
+| `finding_changes` | Findings activated or resolved during the latest run. |
 | `critical`, `important`, `new_features`, `minor` | Newly detected releases grouped by classification. |
 | `last_run_changes` | Releases discovered during the latest run. |
 | `pending_digest_changes` | Releases waiting for the weekly digest. |
@@ -139,6 +153,10 @@ The integration creates three native Home Assistant entities:
 | `github_token_configured` | Whether a GitHub token is currently configured. |
 | `github_authenticated` | Whether the configured token was accepted during the latest run. |
 | `github_rate_remaining` | Remaining GitHub API quota when available. |
+
+The detailed finding lifecycle attributes are exposed by
+`sensor.ha_auditor_active_findings`; the original result sensor keeps compact
+finding counts for existing dashboards and automations.
 
 `partial` means at least one selected repository was not checked because of an
 error or interrupted request sequence. A successful unauthenticated batch stays
@@ -165,6 +183,14 @@ If a repository has no GitHub Releases, HA Auditor falls back to its latest
 GitHub Tags. A matched tag is reported as the source, without inventing release
 notes or a risk classification. Repository metadata is also checked for the
 GitHub `archived` flag and for a last push at least 730 days ago.
+
+Critical and important update findings, and archived-repository findings,
+activate immediately. A repository must be observed as inactive in two
+successful checks before its finding activates. Any active finding needs two
+clean checks before it is marked resolved. A repository deferred by the API
+budget or missed because of a GitHub error does not advance or clear a finding.
+Resolved findings remain available for 30 days; excluded or removed
+repositories are removed from finding storage.
 
 If GitHub rejects a configured token, HA Auditor creates a fixable Home
 Assistant Repair. The repair flow can validate and save a replacement token or
@@ -204,7 +230,7 @@ pytest
 
 The automated suite covers release classification, negated breaking-change
 phrases, summary sanitization, deduplication, configuration handling,
-translations, repository metadata and a basic secret scan.
+translations, repository metadata, finding lifecycle and a basic secret scan.
 
 Want to add another interface language? See
 [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-translation). Each locale is a

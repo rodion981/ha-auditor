@@ -104,11 +104,17 @@
     "sensor": {
       "new_releases": {
         "name": "Нові релізи"
+      },
+      "active_findings": {
+        "name": "Активні знахідки"
       }
     },
     "binary_sensor": {
       "attention_required": {
         "name": "Потрібна увага"
+      },
+      "audit_problem": {
+        "name": "Проблема аудиту"
       }
     },
     "button": {
@@ -131,6 +137,13 @@
     "tag_fallback_reason": "Для цієї версії немає GitHub Release. Версію зіставлено за GitHub-тегом.",
     "repository_status_archived": "Репозиторій архівовано",
     "repository_status_abandoned": "У репозиторії немає активності понад два роки",
+    "finding_type_critical_update": "Критичне оновлення",
+    "finding_type_important_update": "Важливе оновлення",
+    "finding_type_repository_archived": "Архівований репозиторій",
+    "finding_type_repository_abandoned": "Неактивний репозиторій",
+    "finding_recommendation_update": "Відкрийте примітки до релізу й перевірте сумісність перед оновленням.",
+    "finding_recommendation_archived": "Перевірте наявність підтримуваної заміни, перш ніж репозиторій остаточно перестане отримувати виправлення.",
+    "finding_recommendation_abandoned": "Перевірте сумісність із поточною версією Home Assistant і розгляньте підтримувану альтернативу.",
     "error_authentication_401": "GitHub відхилив токен (401). Перевірте або замініть його.",
     "error_rate_limit": "Ліміт запитів GitHub вичерпано; запити мають стати доступними приблизно о {reset}.",
     "error_authentication_403": "GitHub заборонив доступ (403). Перевірте права токена.",
@@ -152,6 +165,7 @@
     "notification_archived": "📦 Архівовані репозиторії: {count}",
     "notification_abandoned": "💤 Репозиторії без активності понад два роки: {count}",
     "notification_partial": "⚠️ Перевірку завершено частково. Результат не є повним.",
+    "notification_new_findings": "Нові важливі знахідки:",
     "notification_review": "Варто переглянути:",
     "notification_no_new_releases": "Нових релізів від попередньої перевірки немає."
   },

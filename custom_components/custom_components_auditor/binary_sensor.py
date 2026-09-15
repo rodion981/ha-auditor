@@ -22,13 +22,18 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the attention indicator."""
+    """Set up actionable-attention and audit-health indicators."""
     manager: ComponentsAuditor = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([AuditorAttentionBinarySensor(manager, entry.entry_id)])
+    async_add_entities(
+        [
+            AuditorAttentionBinarySensor(manager, entry.entry_id),
+            AuditorAuditProblemBinarySensor(manager, entry.entry_id),
+        ]
+    )
 
 
 class AuditorAttentionBinarySensor(AuditorEntity, BinarySensorEntity):
-    """Indicate actionable update risks or an incomplete audit."""
+    """Indicate persistent actionable update or repository findings."""
 
     _attr_translation_key = "attention_required"
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
@@ -46,16 +51,55 @@ class AuditorAttentionBinarySensor(AuditorEntity, BinarySensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose compact counts that explain the indicator."""
-        counts = self.manager.data.get("available_update_counts", {})
-        health = self.manager.data.get("repository_health_counts", {})
+        counts = self.manager.data.get("finding_counts", {})
         return {
             "status": self.manager.data.get("status", "idle"),
-            "critical_updates": counts.get("critical", 0),
-            "important_updates": counts.get("important", 0),
-            "unclassified_updates": counts.get("unknown", 0),
-            "archived_repositories": health.get("archived", 0),
-            "abandoned_repositories": health.get("abandoned", 0),
+            "active_findings": counts.get("total", 0),
+            "critical_findings": counts.get("critical", 0),
+            "important_findings": counts.get("important", 0),
+            "update_findings": counts.get("updates", 0),
+            "repository_health_findings": counts.get("repository_health", 0),
+            "archived_repositories": counts.get("archived", 0),
+            "abandoned_repositories": counts.get("abandoned", 0),
+            "pending_confirmation": self.manager.data.get(
+                "findings_pending_confirmation", 0
+            ),
+        }
+
+
+class AuditorAuditProblemBinarySensor(AuditorEntity, BinarySensorEntity):
+    """Indicate a failed or incomplete GitHub audit."""
+
+    _attr_translation_key = "audit_problem"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_icon = "mdi:cloud-alert-outline"
+
+    def __init__(self, manager: ComponentsAuditor, entry_id: str) -> None:
+        super().__init__(manager, entry_id, "audit_problem")
+        self.entity_id = "binary_sensor.ha_auditor_audit_problem"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether the latest audit failed or was incomplete."""
+        return self.manager.audit_problem
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose compact diagnostics that explain the audit problem."""
+        return {
+            "status": self.manager.data.get("status", "idle"),
             "partial_audit": self.manager.data.get("partial_audit", False),
+            "targeted_this_run": self.manager.data.get("targeted_this_run", 0),
+            "checked_this_run": self.manager.data.get("checked_this_run", 0),
             "deferred_components": self.manager.data.get("deferred_components", 0),
             "cycle_complete": self.manager.data.get("cycle_complete", False),
+            "error_counts": self.manager.data.get("error_counts", {}),
+            "errors": self.manager.data.get("errors", [])[:5],
+            "github_token_configured": self.manager.data.get(
+                "github_token_configured", bool(self.manager.token)
+            ),
+            "github_authenticated": self.manager.data.get(
+                "github_authenticated", bool(self.manager.token)
+            ),
+            "github_rate_remaining": self.manager.data.get("github_rate_remaining"),
         }

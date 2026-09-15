@@ -19,9 +19,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the audit result sensor."""
+    """Set up the audit result and persistent finding sensors."""
     manager: ComponentsAuditor = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([AuditorResultSensor(manager, entry.entry_id)])
+    async_add_entities(
+        [
+            AuditorResultSensor(manager, entry.entry_id),
+            AuditorActiveFindingsSensor(manager, entry.entry_id),
+        ]
+    )
 
 
 class AuditorResultSensor(AuditorEntity, SensorEntity):
@@ -43,3 +48,24 @@ class AuditorResultSensor(AuditorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the bounded actionable audit details."""
         return self.manager.state_attributes()
+
+
+class AuditorActiveFindingsSensor(AuditorEntity, SensorEntity):
+    """Expose the current number and lifecycle of actionable findings."""
+
+    _attr_translation_key = "active_findings"
+    _attr_icon = "mdi:clipboard-text-search-outline"
+
+    def __init__(self, manager: ComponentsAuditor, entry_id: str) -> None:
+        super().__init__(manager, entry_id, "active_findings")
+        self.entity_id = "sensor.ha_auditor_active_findings"
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of active actionable findings."""
+        return int(self.manager.data.get("active_finding_count", 0))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return bounded finding details and lifecycle changes."""
+        return self.manager.finding_attributes()

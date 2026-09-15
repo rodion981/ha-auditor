@@ -19,19 +19,19 @@ Release preparation for `rodion981/ha-auditor`.
 
 ## Validation and release
 
-- [x] Run the final local validation suite: compile, Ruff and 33 pytest tests.
-- [x] Confirm the hassfest job passes on the public branch.
+- [x] Run the current local validation suite: compile, Ruff and 86 pytest tests.
+- [ ] Confirm the hassfest job passes for `1.4.0-beta.1` on the public branch.
 - [x] Validate UI setup and options reload in Home Assistant.
 - [ ] Install the repository as a HACS custom repository in a clean test Home
       Assistant instance.
-- [ ] Validate first-run baseline, a second audit and one simulated failure.
+- [ ] Validate finding activation, a repeated audit and two clean resolution
+      checks on a live Home Assistant instance.
 - [x] Confirm that no secrets, `.storage`, database or private dashboard files
       are tracked.
-- [x] Review the exact staged diff before the first commit.
-- [x] Owner approved the first commit.
-- [x] Owner approved creating and pushing the public GitHub repository.
-- [ ] Publish a GitHub release whose tag matches `1.1.0`.
+- [ ] Review the exact `1.4.0-beta.1` staged diff.
+- [ ] Owner explicitly approves pushing and publishing `1.4.0-beta.1`.
+- [ ] Publish a prerelease whose tag matches `1.4.0-beta.1`.
 
-The clean-instance HACS test and first GitHub release intentionally remain
-separate gates. A public repository is not evidence that the integration has
-passed a live Home Assistant installation test.
+The live Home Assistant test and GitHub prerelease remain separate gates. A
+green local suite is not evidence that the integration has passed hassfest or a
+live Home Assistant installation test.

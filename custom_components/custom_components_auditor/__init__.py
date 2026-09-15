@@ -44,6 +44,11 @@ from .const import (
     STORE_VERSION,
     TOKEN_REPAIR_ISSUE_ID,
 )
+from .findings import (
+    build_finding_candidates,
+    summarize_findings,
+    update_findings,
+)
 from .progress import audit_progress
 from .release import (
     _merge_changes,
@@ -211,6 +216,10 @@ class ComponentsAuditor:
         self.data.setdefault("pending_changes", [])
         self.data.setdefault("cursor", 0)
         self.data.setdefault("status", "idle")
+        if not isinstance(self.data.get("findings"), Mapping):
+            self.data["findings"] = {}
+        self.data.update(summarize_findings(self.data["findings"]))
+        self.data.setdefault("finding_changes", {"activated": [], "resolved": []})
         self._publish()
 
     def add_unsubscriber(self, unsubscribe: Any) -> None:
@@ -304,6 +313,7 @@ class ComponentsAuditor:
                     mode == "digest"
                     or result["counts"]["critical"] > 0
                     or result["counts"]["important"] > 0
+                    or bool(result["finding_changes"]["activated"])
                 )
                 if should_notify:
                     delivered = await self._notify(mode)
@@ -347,6 +357,7 @@ class ComponentsAuditor:
         rate_remaining: int | None = None
         attempted = 0
         checked_successfully = 0
+        checked_repositories: set[str] = set()
 
         for repository in selected:
             attempted += 1
@@ -460,6 +471,7 @@ class ComponentsAuditor:
                 current.pop("available_update", None)
 
             component_state[key] = current
+            checked_repositories.add(key)
             await asyncio.sleep(0.15)
 
         changes.sort(
@@ -510,6 +522,13 @@ class ComponentsAuditor:
             checked_successfully,
             len(error_details),
         )
+        finding_result = update_findings(
+            self.data.get("findings", {}),
+            build_finding_candidates(available_updates, repository_health_details),
+            checked_repositories,
+            active_keys,
+            dt_util.utcnow(),
+        )
 
         return {
             "components": component_state,
@@ -542,6 +561,7 @@ class ComponentsAuditor:
             "github_token_configured": bool(self.token),
             "github_authenticated": bool(self.token) and not authentication_failed,
             "github_rate_remaining": rate_remaining,
+            **finding_result,
         }
 
     @callback
@@ -772,7 +792,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.3.0",
+            "User-Agent": "HA-Auditor/1.4.0-beta.1",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -970,6 +990,22 @@ class ComponentsAuditor:
             else self.data.get("last_run_changes", [])
         )
         changes = [self._with_localized_reason(item) for item in stored_changes]
+        finding_changes = self.data.get("finding_changes", {})
+        activated_findings = [
+            self._with_localized_finding(item)
+            for item in finding_changes.get("activated", [])[:5]
+        ]
+        activated_update_repositories = {
+            str(item.get("repository") or "").casefold()
+            for item in activated_findings
+            if item.get("kind") == "update"
+        }
+        review_changes = [
+            item
+            for item in changes
+            if str(item.get("repository") or "").casefold()
+            not in activated_update_repositories
+        ]
         counts = {key: 0 for key in SEVERITY_ORDER}
         for change in changes:
             severity = change.get("severity", "minor")
@@ -1026,9 +1062,19 @@ class ComponentsAuditor:
             )
             for error in self.data.get("error_details", [])[:3]:
                 lines.append(f"• {error['component']}: {error['message']}")
-        if changes:
+        if activated_findings:
+            lines.extend(["", localize(self.messages, "notification_new_findings")])
+            for finding in activated_findings:
+                marker = "🔴" if finding.get("severity") == "critical" else "🟠"
+                lines.append(
+                    f"{marker} {finding['component']}: "
+                    f"{finding.get('finding_type_label', finding['finding_type'])}"
+                )
+                if finding.get("recommendation"):
+                    lines.append(f"• {finding['recommendation']}")
+        if review_changes:
             lines.extend(["", localize(self.messages, "notification_review")])
-            for change in changes[:5]:
+            for change in review_changes[:5]:
                 marker = {
                     "critical": "🔴",
                     "important": "🟠",
@@ -1041,7 +1087,7 @@ class ComponentsAuditor:
                     lines.append(f"• {change['reason']}")
                 if change["summary"]:
                     lines.append(f"• {change['summary']}")
-        elif mode == "digest":
+        elif mode == "digest" and not changes:
             lines.extend(["", localize(self.messages, "notification_no_new_releases")])
 
         domain, separator, service = self.notify_service.partition(".")
@@ -1062,15 +1108,60 @@ class ComponentsAuditor:
 
     @property
     def attention_required(self) -> bool:
-        """Return whether the current result needs user attention."""
-        counts = self.data.get("available_update_counts", {})
-        health = self.data.get("repository_health_counts", {})
-        return self.data.get("status") in {"partial", "error"} or bool(
-            counts.get("critical", 0)
-            or counts.get("important", 0)
-            or health.get("archived", 0)
-            or health.get("abandoned", 0)
-        )
+        """Return whether persistent actionable findings need attention."""
+        return int(self.data.get("active_finding_count", 0)) > 0
+
+    @property
+    def audit_problem(self) -> bool:
+        """Return whether the latest audit itself failed or was incomplete."""
+        return self.data.get("status") in {"partial", "error"}
+
+    def finding_attributes(self) -> dict[str, Any]:
+        """Return bounded localized attributes for finding entities."""
+        changes = self.data.get("finding_changes", {})
+        return {
+            "active_findings": [
+                self._with_localized_finding(item)
+                for item in self.data.get("active_findings", [])[:20]
+            ],
+            "finding_counts": self.data.get("finding_counts", {}),
+            "findings_pending_confirmation": self.data.get(
+                "findings_pending_confirmation", 0
+            ),
+            "pending_findings": [
+                self._with_localized_finding(item)
+                for item in self.data.get("pending_findings", [])[:10]
+            ],
+            "recently_resolved_findings": [
+                self._with_localized_finding(item)
+                for item in self.data.get("recently_resolved_findings", [])[:10]
+            ],
+            "finding_changes": {
+                "activated": [
+                    self._with_localized_finding(item)
+                    for item in changes.get("activated", [])[:5]
+                ],
+                "resolved": [
+                    self._with_localized_finding(item)
+                    for item in changes.get("resolved", [])[:5]
+                ],
+            },
+        }
+
+    def _with_localized_finding(self, item: Mapping[str, Any]) -> dict[str, Any]:
+        """Render a stored finding type and recommendation in HA language."""
+        localized = dict(item)
+        finding_type = str(item.get("finding_type") or "")
+        recommendation_key = str(item.get("recommendation_key") or "")
+        if finding_type:
+            localized["finding_type_label"] = localize(
+                self.messages, f"finding_type_{finding_type}"
+            )
+        if recommendation_key:
+            localized["recommendation"] = localize(self.messages, recommendation_key)
+        for internal_key in ("id", "fingerprint", "recommendation_key"):
+            localized.pop(internal_key, None)
+        return localized
 
     def state_attributes(self) -> dict[str, Any]:
         """Return bounded attributes for the public audit sensor."""
@@ -1102,6 +1193,12 @@ class ComponentsAuditor:
             ],
             "available_update_counts": self.data.get("available_update_counts", {}),
             "attention_required": self.attention_required,
+            "audit_problem": self.audit_problem,
+            "active_finding_count": self.data.get("active_finding_count", 0),
+            "finding_counts": self.data.get("finding_counts", {}),
+            "findings_pending_confirmation": self.data.get(
+                "findings_pending_confirmation", 0
+            ),
             "up_to_date_components": self.data.get("up_to_date_components", 0),
             "stale_components": self.data.get("stale_components", 0),
             "stale_component_details": self.data.get("stale_component_details", [])[:8],

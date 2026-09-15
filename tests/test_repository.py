@@ -29,7 +29,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.3.0"
+    assert manifest["version"] == "1.4.0-beta.1"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -198,6 +198,13 @@ def test_native_entity_platforms_are_packaged() -> None:
     integration_source = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
     assert "async_forward_entry_setups(entry, PLATFORMS)" in integration_source
     assert "hass.states.async_set" not in integration_source
+    assert "update_findings" in integration_source
+    assert "AuditorActiveFindingsSensor" in (INTEGRATION / "sensor.py").read_text(
+        encoding="utf-8"
+    )
+    assert "AuditorAuditProblemBinarySensor" in (
+        INTEGRATION / "binary_sensor.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_fixable_github_token_repair_is_packaged() -> None:

@@ -3,41 +3,33 @@ cards:
   - type: markdown
     content: |
       {% set entity = 'sensor.custom_components_auditor' %}
+      {% set findings_entity = 'sensor.ha_auditor_active_findings' %}
       {% set status = state_attr(entity, 'status') %}
       {% set checked = state_attr(entity, 'checked_this_run') | int(0) %}
       {% set targeted = state_attr(entity, 'targeted_this_run') | int(0) %}
       {% set total = state_attr(entity, 'total_components') | int(0) %}
       {% set deferred = state_attr(entity, 'deferred_components') | int(0) %}
       {% set cycle_complete = state_attr(entity, 'cycle_complete') %}
-      {% set updates = state_attr(entity, 'available_updates') or [] %}
-      {% set health = state_attr(entity, 'repository_health_details') or [] %}
+      {% set findings = state_attr(findings_entity, 'active_findings') or [] %}
+      {% set pending = state_attr(findings_entity, 'findings_pending_confirmation') | int(0) %}
       {% set excluded = state_attr(entity, 'excluded_components') | int(0) %}
       ## HACS release audit
-      Status: **{{ status or 'not run' }}**<br>
+      Audit status: **{{ status or 'not run' }}** · problem: **{{ states('binary_sensor.ha_auditor_audit_problem') }}**<br>
       Checked: **{{ checked }}/{{ targeted }}** selected, **{{ total }}** total<br>
       {% if cycle_complete %}Inventory coverage: **complete**{% else %}Deferred: **{{ deferred }}**{% endif %}<br>
       Excluded: **{{ excluded }}**<br>
-      Attention required: **{{ states('binary_sensor.ha_auditor_attention_required') }}**
+      Actionable findings: **{{ states(findings_entity) }}** · attention: **{{ states('binary_sensor.ha_auditor_attention_required') }}**{% if pending %} · awaiting confirmation: **{{ pending }}**{% endif %}
 
-      {% if updates %}
-      ### Available updates
-      {% for item in updates[:10] %}
-      {% set marker = '🔴' if item.severity == 'critical' else '🟠' if item.severity == 'important' else '🔵' if item.severity == 'feature' else '⚪' if item.severity == 'minor' else '❔' %}
-      {% set release_marker = '✅' if item.release_status == 'found' else '❌' if item.release_status == 'not_found' else '⏳' %}
-      - {{ marker }} **{{ item.component }}:** `{{ item.installed_version or '?' }}` → `{{ item.latest_version or '?' }}`{% if item.url %} · [release notes]({{ item.url }}){% endif %}
-        {{ release_marker }} {{ item.release_status_label or item.release_status }}
-        {% if item.reason %}{{ item.reason }}{% endif %}
-        {% if item.summary %}{{ item.summary }}{% endif %}
+      {% if findings %}
+      ### What needs attention
+      {% for item in findings[:10] %}
+      {% set marker = '🔴' if item.severity == 'critical' else '🟠' %}
+      - {{ marker }} **{{ item.component }}:** {{ item.finding_type_label or item.finding_type }}{% if item.kind == 'update' %} · `{{ item.installed_version or '?' }}` → `{{ item.latest_version or '?' }}`{% endif %}{% if item.url %} · [details]({{ item.url }}){% endif %}
+        {{ item.recommendation }}
+        First seen: {{ item.first_seen }} · confirmations: {{ item.confirmations }}
       {% endfor %}
       {% else %}
-      No HACS updates are currently reported.
-      {% endif %}
-
-      {% if health %}
-      ### Repository health
-      {% for item in health[:10] %}
-      - {{ '📦' if item.status == 'archived' else '💤' }} **{{ item.component }}:** {{ item.status_label or item.status }}{% if item.days_since_push is not none %} · {{ item.days_since_push }} days since last push{% endif %}{% if item.url %} · [GitHub]({{ item.url }}){% endif %}
-      {% endfor %}
+      No actionable findings are active.
       {% endif %}
   - type: button
     entity: button.ha_auditor_run_audit

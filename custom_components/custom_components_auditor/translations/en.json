@@ -104,11 +104,17 @@
     "sensor": {
       "new_releases": {
         "name": "New releases"
+      },
+      "active_findings": {
+        "name": "Active findings"
       }
     },
     "binary_sensor": {
       "attention_required": {
         "name": "Attention required"
+      },
+      "audit_problem": {
+        "name": "Audit problem"
       }
     },
     "button": {
@@ -131,6 +137,13 @@
     "tag_fallback_reason": "No GitHub Release was published for this version. The version was matched using a GitHub tag.",
     "repository_status_archived": "Repository archived",
     "repository_status_abandoned": "No repository activity for over two years",
+    "finding_type_critical_update": "Critical update",
+    "finding_type_important_update": "Important update",
+    "finding_type_repository_archived": "Archived repository",
+    "finding_type_repository_abandoned": "Inactive repository",
+    "finding_recommendation_update": "Open the release notes and review compatibility before updating.",
+    "finding_recommendation_archived": "Check for a maintained replacement before the repository stops receiving fixes.",
+    "finding_recommendation_abandoned": "Confirm compatibility with the current Home Assistant version and consider a maintained alternative.",
     "error_authentication_401": "GitHub rejected the token (401). Check or replace it.",
     "error_rate_limit": "The GitHub rate limit is exhausted; requests should be available again around {reset}.",
     "error_authentication_403": "GitHub denied access (403). Check the token permissions.",
@@ -152,6 +165,7 @@
     "notification_archived": "📦 Archived repositories: {count}",
     "notification_abandoned": "💤 Repositories inactive for over two years: {count}",
     "notification_partial": "⚠️ The audit completed partially. The result is not complete.",
+    "notification_new_findings": "New actionable findings:",
     "notification_review": "Review these releases:",
     "notification_no_new_releases": "No new releases since the previous audit."
   },
