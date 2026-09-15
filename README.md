@@ -109,6 +109,29 @@ data:
 Set `notify: false` when you want to refresh the sensor without sending
 immediate notifications.
 
+## Managing findings
+
+Every active finding exposes a stable `finding_id`. Use it with the native HA
+Auditor actions from **Developer tools > Actions** or in an automation:
+
+```yaml
+action: custom_components_auditor.acknowledge_finding
+data:
+  finding_id: "ad-ha/kidschores-ha:health"
+```
+
+- `acknowledge_finding` keeps the finding visible but marks it as reviewed.
+- `snooze_finding` removes it from the attention indicator for 7 or 30 days;
+  add `days: 7` or `days: 30` to the action data.
+- `ignore_finding` hides that exact finding from the attention indicator until
+  its available version or repository condition changes.
+- `restore_finding` returns an acknowledged, snoozed or ignored finding to
+  `new`.
+
+The finding remains technically active until the auditor confirms that its
+underlying condition is gone. A new update version gets a new fingerprint and
+automatically returns to `new`, even when the previous version was reviewed.
+
 ## Understanding the result
 
 The integration creates five native Home Assistant entities:
@@ -117,7 +140,7 @@ The integration creates five native Home Assistant entities:
 | --- | --- |
 | `sensor.custom_components_auditor` | Number of releases first seen during the latest audit, with full audit details in its attributes. |
 | `sensor.ha_auditor_active_findings` | Number of persistent actionable findings, with their lifecycle, recommendation and URL in attributes. |
-| `binary_sensor.ha_auditor_attention_required` | Turns on only while at least one actionable finding is active. |
+| `binary_sensor.ha_auditor_attention_required` | Turns on only while at least one active finding is new and unreviewed. |
 | `binary_sensor.ha_auditor_audit_problem` | Turns on when the latest audit is partial or failed. |
 | `button.ha_auditor_run_audit` | Runs the most complete audit allowed by the configured GitHub credentials without sending a push notification. |
 
@@ -140,8 +163,8 @@ The integration creates five native Home Assistant entities:
 | `attention_required` | Whether the current result needs user attention. |
 | `audit_problem` | Whether the latest audit is partial or failed. |
 | `active_finding_count` | Number of active actionable findings. |
-| `active_findings` | Repository, component, type, severity, first/last seen time, confirmations, recommendation and URL for each active finding. |
-| `finding_counts` | Active findings grouped by severity and source. |
+| `active_findings` | Stable finding ID, repository, component, type, severity, review status, lifecycle timestamps, recommendation and URL for each active finding. |
+| `finding_counts` | Active findings grouped by severity, source and `new`, `acknowledged`, `snoozed` or `ignored` review status. |
 | `findings_pending_confirmation` | Potential inactive-repository findings waiting for another successful observation. |
 | `pending_findings` | Details of inactive-repository candidates waiting for confirmation. |
 | `recently_resolved_findings` | Findings confirmed absent by two clean checks and retained for 30 days. |
@@ -191,6 +214,10 @@ clean checks before it is marked resolved. A repository deferred by the API
 budget or missed because of a GitHub error does not advance or clear a finding.
 Resolved findings remain available for 30 days; excluded or removed
 repositories are removed from finding storage.
+
+Acknowledging, snoozing or ignoring a finding changes only its review status.
+The finding stays in `active_findings`, but only `new` findings turn on the
+attention binary sensor. Snoozes reopen automatically at their deadline.
 
 If GitHub rejects a configured token, HA Auditor creates a fixable Home
 Assistant Repair. The repair flow can validate and save a replacement token or

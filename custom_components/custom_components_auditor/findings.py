@@ -3,12 +3,31 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 _SEVERITY_ORDER = {"important": 1, "critical": 2}
 _RESOLUTION_CONFIRMATIONS = 2
 _RESOLVED_RETENTION_DAYS = 30
+REVIEW_NEW = "new"
+REVIEW_ACKNOWLEDGED = "acknowledged"
+REVIEW_SNOOZED = "snoozed"
+REVIEW_IGNORED = "ignored"
+REVIEW_STATES = {
+    REVIEW_NEW,
+    REVIEW_ACKNOWLEDGED,
+    REVIEW_SNOOZED,
+    REVIEW_IGNORED,
+}
+SNOOZE_DAYS = {7, 30}
+
+
+class FindingNotFound(KeyError):
+    """Raised when a finding action targets an unknown stable ID."""
+
+
+class FindingNotActionable(ValueError):
+    """Raised when a finding action targets a non-active finding."""
 
 
 def build_finding_candidates(
@@ -79,11 +98,15 @@ def update_findings(
     checked = {item.casefold() for item in checked_repositories}
     active_repositories_set = {item.casefold() for item in active_repositories}
     timestamp = now.isoformat()
-    state = {
-        finding_id: dict(finding)
-        for finding_id, finding in existing.items()
-        if str(finding.get("repository") or "").casefold() in active_repositories_set
-    }
+    state = normalize_finding_workflow(
+        {
+            finding_id: dict(finding)
+            for finding_id, finding in existing.items()
+            if str(finding.get("repository") or "").casefold()
+            in active_repositories_set
+        },
+        now,
+    )
     candidate_map = {
         str(candidate["id"]): dict(candidate)
         for candidate in candidates
@@ -133,6 +156,7 @@ def update_findings(
             finding = {
                 **candidate,
                 "status": "pending",
+                "review_status": REVIEW_NEW,
                 "first_seen": timestamp,
                 "last_seen": timestamp,
                 "last_checked": timestamp,
@@ -141,14 +165,21 @@ def update_findings(
             }
         else:
             lifecycle = {
-                key: previous.get(key)
+                key: previous[key]
                 for key in (
                     "status",
                     "first_seen",
                     "activated_at",
                     "confirmations",
                     "clear_confirmations",
+                    "review_status",
+                    "review_updated_at",
+                    "acknowledged_at",
+                    "snoozed_at",
+                    "snoozed_until",
+                    "ignored_at",
                 )
+                if key in previous
             }
             finding = {
                 **candidate,
@@ -167,7 +198,7 @@ def update_findings(
         state[finding_id] = finding
 
     _prune_resolved(state, now)
-    summary = summarize_findings(state)
+    summary = summarize_findings(state, now)
     return {
         "findings": state,
         **summary,
@@ -178,14 +209,77 @@ def update_findings(
     }
 
 
-def summarize_findings(state: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+def normalize_finding_workflow(
+    existing: Mapping[str, Mapping[str, Any]], now: datetime
+) -> dict[str, dict[str, Any]]:
+    """Normalize legacy workflow fields and reopen expired snoozes."""
+    state = {finding_id: dict(finding) for finding_id, finding in existing.items()}
+    for finding in state.values():
+        review_status = str(finding.get("review_status") or REVIEW_NEW)
+        if review_status not in REVIEW_STATES:
+            review_status = REVIEW_NEW
+        if review_status == REVIEW_SNOOZED:
+            snoozed_until = _parse_timestamp(finding.get("snoozed_until"), now)
+            if snoozed_until is None or snoozed_until <= now:
+                review_status = REVIEW_NEW
+                finding.pop("snoozed_at", None)
+                finding.pop("snoozed_until", None)
+                finding["review_updated_at"] = now.isoformat()
+            else:
+                finding["snoozed_until"] = snoozed_until.isoformat()
+        finding["review_status"] = review_status
+    return state
+
+
+def set_finding_review_state(
+    existing: Mapping[str, Mapping[str, Any]],
+    finding_id: str,
+    review_status: str,
+    now: datetime,
+    snooze_days: int | None = None,
+) -> dict[str, Any]:
+    """Apply one explicit user workflow action to an active finding."""
+    if review_status not in REVIEW_STATES:
+        raise ValueError(f"Unsupported finding review state: {review_status}")
+    state = normalize_finding_workflow(existing, now)
+    finding = state.get(finding_id)
+    if finding is None:
+        raise FindingNotFound(finding_id)
+    if finding.get("status") != "active":
+        raise FindingNotActionable(finding_id)
+
+    for field in ("acknowledged_at", "snoozed_at", "snoozed_until", "ignored_at"):
+        finding.pop(field, None)
+    timestamp = now.isoformat()
+    finding["review_status"] = review_status
+    finding["review_updated_at"] = timestamp
+    if review_status == REVIEW_ACKNOWLEDGED:
+        finding["acknowledged_at"] = timestamp
+    elif review_status == REVIEW_SNOOZED:
+        if snooze_days not in SNOOZE_DAYS:
+            raise ValueError("Snooze duration must be 7 or 30 days")
+        finding["snoozed_at"] = timestamp
+        finding["snoozed_until"] = (now + timedelta(days=snooze_days)).isoformat()
+    elif review_status == REVIEW_IGNORED:
+        finding["ignored_at"] = timestamp
+
+    return {"findings": state, **summarize_findings(state, now)}
+
+
+def summarize_findings(
+    state: Mapping[str, Mapping[str, Any]], now: datetime | None = None
+) -> dict[str, Any]:
     """Return bounded public lists and counts from stored finding state."""
-    active = [dict(item) for item in state.values() if item.get("status") == "active"]
+    current = now or datetime.now(UTC)
+    normalized = normalize_finding_workflow(state, current)
+    active = [
+        dict(item) for item in normalized.values() if item.get("status") == "active"
+    ]
     pending_items = [
-        dict(item) for item in state.values() if item.get("status") == "pending"
+        dict(item) for item in normalized.values() if item.get("status") == "pending"
     ]
     recently_resolved = [
-        dict(item) for item in state.values() if item.get("status") == "resolved"
+        dict(item) for item in normalized.values() if item.get("status") == "resolved"
     ]
     active.sort(key=_finding_sort_key, reverse=True)
     pending_items.sort(key=_finding_sort_key, reverse=True)
@@ -205,6 +299,16 @@ def summarize_findings(state: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]
         ),
         "abandoned": sum(
             1 for item in active if item.get("finding_type") == "repository_abandoned"
+        ),
+        "new": sum(1 for item in active if item.get("review_status") == REVIEW_NEW),
+        "acknowledged": sum(
+            1 for item in active if item.get("review_status") == REVIEW_ACKNOWLEDGED
+        ),
+        "snoozed": sum(
+            1 for item in active if item.get("review_status") == REVIEW_SNOOZED
+        ),
+        "ignored": sum(
+            1 for item in active if item.get("review_status") == REVIEW_IGNORED
         ),
     }
     return {
@@ -246,3 +350,14 @@ def _prune_resolved(state: dict[str, dict[str, Any]], now: datetime) -> None:
             resolved_at = resolved_at.replace(tzinfo=now.tzinfo)
         if resolved_at < cutoff:
             del state[finding_id]
+
+
+def _parse_timestamp(value: Any, reference: datetime) -> datetime | None:
+    """Parse an ISO timestamp and align a legacy naive value to the reference."""
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None and reference.tzinfo is not None:
+        parsed = parsed.replace(tzinfo=reference.tzinfo)
+    return parsed

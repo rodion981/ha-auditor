@@ -2,6 +2,10 @@
 
 DOMAIN = "custom_components_auditor"
 SERVICE_RUN_AUDIT = "run_audit"
+SERVICE_ACKNOWLEDGE_FINDING = "acknowledge_finding"
+SERVICE_SNOOZE_FINDING = "snooze_finding"
+SERVICE_IGNORE_FINDING = "ignore_finding"
+SERVICE_RESTORE_FINDING = "restore_finding"
 SENSOR_ENTITY_ID = "sensor.custom_components_auditor"
 
 CONF_GITHUB_TOKEN = "github_token"
@@ -54,6 +58,10 @@ MESSAGE_KEYS = (
     "finding_recommendation_update",
     "finding_recommendation_archived",
     "finding_recommendation_abandoned",
+    "finding_review_new",
+    "finding_review_acknowledged",
+    "finding_review_snoozed",
+    "finding_review_ignored",
     "error_authentication_401",
     "error_rate_limit",
     "error_authentication_403",

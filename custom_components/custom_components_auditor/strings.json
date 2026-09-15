@@ -64,11 +64,61 @@
           "description": "Send important results through the configured notification action."
         }
       }
+    },
+    "acknowledge_finding": {
+      "name": "Acknowledge finding",
+      "description": "Mark an active finding as reviewed while keeping it visible.",
+      "fields": {
+        "finding_id": {
+          "name": "Finding ID",
+          "description": "Stable finding_id exposed by the Active findings sensor."
+        }
+      }
+    },
+    "snooze_finding": {
+      "name": "Snooze finding",
+      "description": "Temporarily hide an active finding from the attention indicator.",
+      "fields": {
+        "finding_id": {
+          "name": "Finding ID",
+          "description": "Stable finding_id exposed by the Active findings sensor."
+        },
+        "days": {
+          "name": "Snooze duration",
+          "description": "Reopen the finding after 7 or 30 days."
+        }
+      }
+    },
+    "ignore_finding": {
+      "name": "Ignore finding",
+      "description": "Hide this exact finding until its release version or repository condition changes.",
+      "fields": {
+        "finding_id": {
+          "name": "Finding ID",
+          "description": "Stable finding_id exposed by the Active findings sensor."
+        }
+      }
+    },
+    "restore_finding": {
+      "name": "Restore finding",
+      "description": "Return an acknowledged, snoozed or ignored finding to the new state.",
+      "fields": {
+        "finding_id": {
+          "name": "Finding ID",
+          "description": "Stable finding_id exposed by the Active findings sensor."
+        }
+      }
     }
   },
   "exceptions": {
     "not_configured": {
       "message": "HA Auditor is not configured. Add it from Settings > Devices & services."
+    },
+    "finding_not_found": {
+      "message": "The requested finding no longer exists. Refresh the Active findings sensor and try again."
+    },
+    "finding_not_active": {
+      "message": "The requested finding is not active and cannot be reviewed."
     }
   },
   "issues": {
@@ -144,6 +194,10 @@
     "finding_recommendation_update": "Open the release notes and review compatibility before updating.",
     "finding_recommendation_archived": "Check for a maintained replacement before the repository stops receiving fixes.",
     "finding_recommendation_abandoned": "Confirm compatibility with the current Home Assistant version and consider a maintained alternative.",
+    "finding_review_new": "New",
+    "finding_review_acknowledged": "Acknowledged",
+    "finding_review_snoozed": "Snoozed",
+    "finding_review_ignored": "Ignored",
     "error_authentication_401": "GitHub rejected the token (401). Check or replace it.",
     "error_rate_limit": "The GitHub rate limit is exhausted; requests should be available again around {reset}.",
     "error_authentication_403": "GitHub denied access (403). Check the token permissions.",
@@ -186,6 +240,12 @@
         "4": "Friday",
         "5": "Saturday",
         "6": "Sunday"
+      }
+    },
+    "snooze_days": {
+      "options": {
+        "7": "7 days",
+        "30": "30 days"
       }
     }
   }

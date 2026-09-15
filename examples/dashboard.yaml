@@ -11,6 +11,7 @@ cards:
       {% set deferred = state_attr(entity, 'deferred_components') | int(0) %}
       {% set cycle_complete = state_attr(entity, 'cycle_complete') %}
       {% set findings = state_attr(findings_entity, 'active_findings') or [] %}
+      {% set finding_counts = state_attr(findings_entity, 'finding_counts') or {} %}
       {% set pending = state_attr(findings_entity, 'findings_pending_confirmation') | int(0) %}
       {% set excluded = state_attr(entity, 'excluded_components') | int(0) %}
       ## HACS release audit
@@ -18,7 +19,7 @@ cards:
       Checked: **{{ checked }}/{{ targeted }}** selected, **{{ total }}** total<br>
       {% if cycle_complete %}Inventory coverage: **complete**{% else %}Deferred: **{{ deferred }}**{% endif %}<br>
       Excluded: **{{ excluded }}**<br>
-      Actionable findings: **{{ states(findings_entity) }}** · attention: **{{ states('binary_sensor.ha_auditor_attention_required') }}**{% if pending %} · awaiting confirmation: **{{ pending }}**{% endif %}
+      Actionable findings: **{{ states(findings_entity) }}** · new: **{{ finding_counts.get('new', 0) }}** · attention: **{{ states('binary_sensor.ha_auditor_attention_required') }}**{% if pending %} · awaiting confirmation: **{{ pending }}**{% endif %}
 
       {% if findings %}
       ### What needs attention
@@ -26,7 +27,8 @@ cards:
       {% set marker = '🔴' if item.severity == 'critical' else '🟠' %}
       - {{ marker }} **{{ item.component }}:** {{ item.finding_type_label or item.finding_type }}{% if item.kind == 'update' %} · `{{ item.installed_version or '?' }}` → `{{ item.latest_version or '?' }}`{% endif %}{% if item.url %} · [details]({{ item.url }}){% endif %}
         {{ item.recommendation }}
-        First seen: {{ item.first_seen }} · confirmations: {{ item.confirmations }}
+        Review: {{ item.review_status_label or item.review_status }} · ID: `{{ item.finding_id }}`
+        First seen: {{ item.first_seen }} · confirmations: {{ item.confirmations }}{% if item.snoozed_until %} · snoozed until: {{ item.snoozed_until }}{% endif %}
       {% endfor %}
       {% else %}
       No actionable findings are active.

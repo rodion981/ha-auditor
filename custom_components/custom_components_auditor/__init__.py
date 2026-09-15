@@ -18,7 +18,11 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_call_later, async_track_time_change
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_point_in_utc_time,
+    async_track_time_change,
+)
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
@@ -38,14 +42,27 @@ from .const import (
     DEFAULT_WEEKLY_WEEKDAY,
     DOMAIN,
     MESSAGE_KEYS,
+    SERVICE_ACKNOWLEDGE_FINDING,
+    SERVICE_IGNORE_FINDING,
+    SERVICE_RESTORE_FINDING,
     SERVICE_RUN_AUDIT,
+    SERVICE_SNOOZE_FINDING,
     SEVERITY_ORDER,
     STORE_KEY,
     STORE_VERSION,
     TOKEN_REPAIR_ISSUE_ID,
 )
 from .findings import (
+    REVIEW_ACKNOWLEDGED,
+    REVIEW_IGNORED,
+    REVIEW_NEW,
+    REVIEW_SNOOZED,
+    SNOOZE_DAYS,
+    FindingNotActionable,
+    FindingNotFound,
     build_finding_candidates,
+    normalize_finding_workflow,
+    set_finding_review_state,
     summarize_findings,
     update_findings,
 )
@@ -101,6 +118,15 @@ SERVICE_SCHEMA = vol.Schema(
     }
 )
 
+FINDING_ACTION_SCHEMA = vol.Schema({vol.Required("finding_id"): cv.string})
+
+SNOOZE_FINDING_SCHEMA = vol.Schema(
+    {
+        vol.Required("finding_id"): cv.string,
+        vol.Required("days", default=7): vol.All(vol.Coerce(int), vol.In(SNOOZE_DAYS)),
+    }
+)
+
 GITHUB_REPOSITORY_RE = re.compile(
     r"^https?://github\.com/([^/]+)/([^/#?]+)", re.IGNORECASE
 )
@@ -119,8 +145,71 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             )
         await manager.async_run(call.data["mode"], call.data["notify"])
 
+    def get_manager() -> ComponentsAuditor:
+        manager = next(iter(managers.values()), None)
+        if manager is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="not_configured",
+            )
+        return manager
+
+    async def apply_finding_action(call: ServiceCall, review_status: str) -> None:
+        try:
+            await get_manager().async_set_finding_review_state(
+                call.data["finding_id"],
+                review_status,
+                call.data.get("days"),
+            )
+        except FindingNotFound as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="finding_not_found",
+            ) from err
+        except FindingNotActionable as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="finding_not_active",
+            ) from err
+
+    async def handle_acknowledge(call: ServiceCall) -> None:
+        await apply_finding_action(call, REVIEW_ACKNOWLEDGED)
+
+    async def handle_snooze(call: ServiceCall) -> None:
+        await apply_finding_action(call, REVIEW_SNOOZED)
+
+    async def handle_ignore(call: ServiceCall) -> None:
+        await apply_finding_action(call, REVIEW_IGNORED)
+
+    async def handle_restore(call: ServiceCall) -> None:
+        await apply_finding_action(call, REVIEW_NEW)
+
     hass.services.async_register(
         DOMAIN, SERVICE_RUN_AUDIT, handle_run, schema=SERVICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ACKNOWLEDGE_FINDING,
+        handle_acknowledge,
+        schema=FINDING_ACTION_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SNOOZE_FINDING,
+        handle_snooze,
+        schema=SNOOZE_FINDING_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_IGNORE_FINDING,
+        handle_ignore,
+        schema=FINDING_ACTION_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESTORE_FINDING,
+        handle_restore,
+        schema=FINDING_ACTION_SCHEMA,
     )
 
     if yaml_config := config.get(DOMAIN):
@@ -207,6 +296,7 @@ class ComponentsAuditor:
         self.data: dict[str, Any] = {}
         self._unsubscribers: list[Any] = []
         self._listeners: set[Callable[[], None]] = set()
+        self._snooze_unsubscribe: Callable[[], None] | None = None
 
     async def async_initialize(self) -> None:
         """Restore the previous checkpoint and publish the sensor."""
@@ -219,7 +309,9 @@ class ComponentsAuditor:
         self.data.setdefault("status", "idle")
         if not isinstance(self.data.get("findings"), Mapping):
             self.data["findings"] = {}
-        self.data.update(summarize_findings(self.data["findings"]))
+        now = dt_util.utcnow()
+        self.data["findings"] = normalize_finding_workflow(self.data["findings"], now)
+        self.data.update(summarize_findings(self.data["findings"], now))
         self.data.setdefault("finding_changes", {"activated": [], "resolved": []})
         self._publish()
 
@@ -277,10 +369,14 @@ class ComponentsAuditor:
                 second=0,
             )
         )
+        self._schedule_next_snooze_expiry()
 
     @callback
     def async_shutdown(self) -> None:
         """Cancel listeners and timers registered for this config entry."""
+        if self._snooze_unsubscribe is not None:
+            self._snooze_unsubscribe()
+            self._snooze_unsubscribe = None
         while self._unsubscribers:
             self._unsubscribers.pop()()
         self._listeners.clear()
@@ -309,6 +405,7 @@ class ComponentsAuditor:
                     self.data["last_weekly_digest"] = dt_util.utcnow().isoformat()
                 await self.store.async_save(self.data)
                 self._publish()
+                self._schedule_next_snooze_expiry()
 
                 should_notify = notify and (
                     mode == "digest"
@@ -329,6 +426,73 @@ class ComponentsAuditor:
                 self.data["last_checked"] = attempt_at
                 await self.store.async_save(self.data)
                 self._publish()
+
+    async def async_set_finding_review_state(
+        self,
+        finding_id: str,
+        review_status: str,
+        snooze_days: int | None = None,
+    ) -> None:
+        """Persist an explicit acknowledge, snooze, ignore or restore action."""
+        async with self.lock:
+            result = set_finding_review_state(
+                self.data.get("findings", {}),
+                finding_id,
+                review_status,
+                dt_util.utcnow(),
+                snooze_days,
+            )
+            self.data.update(result)
+            await self.store.async_save(self.data)
+            self._publish()
+        self._schedule_next_snooze_expiry()
+
+    @callback
+    def _schedule_next_snooze_expiry(self) -> None:
+        """Schedule a state refresh for the earliest active snooze deadline."""
+        if self._snooze_unsubscribe is not None:
+            self._snooze_unsubscribe()
+            self._snooze_unsubscribe = None
+        deadlines: list[datetime] = []
+        for finding in self.data.get("findings", {}).values():
+            if (
+                finding.get("status") != "active"
+                or finding.get("review_status") != REVIEW_SNOOZED
+            ):
+                continue
+            deadline = dt_util.parse_datetime(str(finding.get("snoozed_until") or ""))
+            if deadline is not None:
+                deadlines.append(deadline)
+        if not deadlines:
+            return
+        earliest = min(deadlines)
+        if earliest <= dt_util.utcnow():
+            self.hass.async_create_task(self._async_expire_snoozes(), eager_start=True)
+            return
+        self._snooze_unsubscribe = async_track_point_in_utc_time(
+            self.hass,
+            self._handle_snooze_expiry,
+            earliest,
+        )
+
+    @callback
+    def _handle_snooze_expiry(self, _now: datetime) -> None:
+        """Refresh finding states when a snooze deadline is reached."""
+        self._snooze_unsubscribe = None
+        self.hass.async_create_task(self._async_expire_snoozes(), eager_start=True)
+
+    async def _async_expire_snoozes(self) -> None:
+        """Reopen expired snoozes and publish the changed attention state."""
+        async with self.lock:
+            now = dt_util.utcnow()
+            current = self.data.get("findings", {})
+            normalized = normalize_finding_workflow(current, now)
+            if normalized != current:
+                self.data["findings"] = normalized
+                self.data.update(summarize_findings(normalized, now))
+                await self.store.async_save(self.data)
+                self._publish()
+        self._schedule_next_snooze_expiry()
 
     async def _audit(self, mode: str) -> dict[str, Any]:
         repositories, skipped, excluded = self._discover_repositories()
@@ -795,7 +959,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.4.0",
+            "User-Agent": "HA-Auditor/1.5.0-beta.1",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -1111,8 +1275,9 @@ class ComponentsAuditor:
 
     @property
     def attention_required(self) -> bool:
-        """Return whether persistent actionable findings need attention."""
-        return int(self.data.get("active_finding_count", 0)) > 0
+        """Return whether new actionable findings still need review."""
+        counts = self.data.get("finding_counts", {})
+        return int(counts.get("new", 0)) > 0
 
     @property
     def audit_problem(self) -> bool:
@@ -1156,12 +1321,19 @@ class ComponentsAuditor:
         localized = dict(item)
         finding_type = str(item.get("finding_type") or "")
         recommendation_key = str(item.get("recommendation_key") or "")
+        review_status = str(item.get("review_status") or REVIEW_NEW)
+        if item.get("id"):
+            localized["finding_id"] = str(item["id"])
         if finding_type:
             localized["finding_type_label"] = localize(
                 self.messages, f"finding_type_{finding_type}"
             )
         if recommendation_key:
             localized["recommendation"] = localize(self.messages, recommendation_key)
+        localized["review_status"] = review_status
+        localized["review_status_label"] = localize(
+            self.messages, f"finding_review_{review_status}"
+        )
         for internal_key in ("id", "fingerprint", "recommendation_key"):
             localized.pop(internal_key, None)
         return localized

@@ -15,3 +15,40 @@ run_audit:
       default: true
       selector:
         boolean:
+
+acknowledge_finding:
+  fields:
+    finding_id:
+      required: true
+      selector:
+        text:
+
+snooze_finding:
+  fields:
+    finding_id:
+      required: true
+      selector:
+        text:
+    days:
+      required: true
+      default: "7"
+      selector:
+        select:
+          translation_key: snooze_days
+          options:
+            - "7"
+            - "30"
+
+ignore_finding:
+  fields:
+    finding_id:
+      required: true
+      selector:
+        text:
+
+restore_finding:
+  fields:
+    finding_id:
+      required: true
+      selector:
+        text:

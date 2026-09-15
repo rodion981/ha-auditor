@@ -6,6 +6,8 @@ import importlib.util
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 MODULE_PATH = (
     Path(__file__).parents[1]
     / "custom_components"
@@ -75,6 +77,7 @@ def test_important_update_activates_immediately_and_does_not_duplicate() -> None
     assert second["active_finding_count"] == 1
     assert second["active_findings"][0]["confirmations"] == 2
     assert second["finding_changes"]["activated"] == []
+    assert second["finding_counts"]["new"] == 1
 
 
 def test_abandoned_repository_requires_two_successful_observations() -> None:
@@ -137,6 +140,125 @@ def test_new_update_version_starts_a_new_finding_lifecycle() -> None:
     assert result["recently_resolved_findings"][0]["resolution_reason"] == (
         "superseded"
     )
+
+
+def test_acknowledged_finding_stays_active_but_no_longer_new() -> None:
+    candidate = findings.build_finding_candidates([_update()], [])
+    active = _run({}, candidate)
+    finding_id = active["active_findings"][0]["id"]
+
+    result = findings.set_finding_review_state(
+        active["findings"],
+        finding_id,
+        findings.REVIEW_ACKNOWLEDGED,
+        NOW,
+    )
+
+    assert result["active_finding_count"] == 1
+    assert result["finding_counts"]["new"] == 0
+    assert result["finding_counts"]["acknowledged"] == 1
+    assert result["active_findings"][0]["acknowledged_at"] == NOW.isoformat()
+
+
+def test_snoozed_finding_reopens_after_its_deadline() -> None:
+    candidate = findings.build_finding_candidates([_update()], [])
+    active = _run({}, candidate)
+    finding_id = active["active_findings"][0]["id"]
+    snoozed = findings.set_finding_review_state(
+        active["findings"],
+        finding_id,
+        findings.REVIEW_SNOOZED,
+        NOW,
+        snooze_days=7,
+    )
+
+    before_deadline = findings.summarize_findings(
+        snoozed["findings"], NOW + timedelta(days=6)
+    )
+    after_deadline = findings.summarize_findings(
+        snoozed["findings"], NOW + timedelta(days=8)
+    )
+
+    assert before_deadline["finding_counts"]["snoozed"] == 1
+    assert before_deadline["finding_counts"]["new"] == 0
+    assert after_deadline["finding_counts"]["snoozed"] == 0
+    assert after_deadline["finding_counts"]["new"] == 1
+
+
+def test_legacy_naive_snooze_deadline_is_normalized() -> None:
+    candidate = findings.build_finding_candidates([_update()], [])
+    active = _run({}, candidate)
+    finding_id = active["active_findings"][0]["id"]
+    active["findings"][finding_id]["review_status"] = findings.REVIEW_SNOOZED
+    active["findings"][finding_id]["snoozed_until"] = "2026-09-22T12:00:00"
+
+    result = findings.normalize_finding_workflow(active["findings"], NOW)
+
+    assert result[finding_id]["review_status"] == findings.REVIEW_SNOOZED
+    assert result[finding_id]["snoozed_until"] == "2026-09-22T12:00:00+00:00"
+
+
+def test_ignored_finding_persists_until_its_fingerprint_changes() -> None:
+    first_candidate = findings.build_finding_candidates([_update()], [])
+    active = _run({}, first_candidate)
+    finding_id = active["active_findings"][0]["id"]
+    ignored = findings.set_finding_review_state(
+        active["findings"],
+        finding_id,
+        findings.REVIEW_IGNORED,
+        NOW,
+    )
+
+    same_version = _run(ignored["findings"], first_candidate, NOW + timedelta(days=1))
+    next_candidate = findings.build_finding_candidates([_update(version="3.0.0")], [])
+    next_version = _run(
+        same_version["findings"], next_candidate, NOW + timedelta(days=2)
+    )
+
+    assert same_version["finding_counts"]["ignored"] == 1
+    assert same_version["finding_counts"]["new"] == 0
+    assert next_version["finding_counts"]["ignored"] == 0
+    assert next_version["finding_counts"]["new"] == 1
+
+
+def test_restore_returns_a_reviewed_finding_to_new() -> None:
+    candidate = findings.build_finding_candidates([_update()], [])
+    active = _run({}, candidate)
+    finding_id = active["active_findings"][0]["id"]
+    acknowledged = findings.set_finding_review_state(
+        active["findings"],
+        finding_id,
+        findings.REVIEW_ACKNOWLEDGED,
+        NOW,
+    )
+
+    restored = findings.set_finding_review_state(
+        acknowledged["findings"],
+        finding_id,
+        findings.REVIEW_NEW,
+        NOW + timedelta(minutes=1),
+    )
+
+    assert restored["finding_counts"]["new"] == 1
+    assert restored["finding_counts"]["acknowledged"] == 0
+    assert "acknowledged_at" not in restored["active_findings"][0]
+
+
+def test_review_action_rejects_unknown_or_non_active_findings() -> None:
+    candidate = findings.build_finding_candidates([], [_health()])
+    pending = _run({}, candidate)
+
+    with pytest.raises(findings.FindingNotFound):
+        findings.set_finding_review_state(
+            pending["findings"], "missing:update", findings.REVIEW_IGNORED, NOW
+        )
+    with pytest.raises(findings.FindingNotActionable):
+        findings.set_finding_review_state(
+            pending["findings"],
+            pending["pending_findings"][0]["id"],
+            findings.REVIEW_IGNORED,
+            NOW,
+        )
 
 
 def test_excluded_or_removed_repository_forgets_its_findings() -> None:

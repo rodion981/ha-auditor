@@ -2,6 +2,18 @@
   "services": {
     "run_audit": {
       "service": "mdi:refresh"
+    },
+    "acknowledge_finding": {
+      "service": "mdi:check-circle-outline"
+    },
+    "snooze_finding": {
+      "service": "mdi:clock-outline"
+    },
+    "ignore_finding": {
+      "service": "mdi:eye-off-outline"
+    },
+    "restore_finding": {
+      "service": "mdi:backup-restore"
     }
   }
 }

@@ -33,7 +33,7 @@ async def async_setup_entry(
 
 
 class AuditorAttentionBinarySensor(AuditorEntity, BinarySensorEntity):
-    """Indicate persistent actionable update or repository findings."""
+    """Indicate new actionable findings that have not been reviewed."""
 
     _attr_translation_key = "attention_required"
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
@@ -55,6 +55,10 @@ class AuditorAttentionBinarySensor(AuditorEntity, BinarySensorEntity):
         return {
             "status": self.manager.data.get("status", "idle"),
             "active_findings": counts.get("total", 0),
+            "new_findings": counts.get("new", 0),
+            "acknowledged_findings": counts.get("acknowledged", 0),
+            "snoozed_findings": counts.get("snoozed", 0),
+            "ignored_findings": counts.get("ignored", 0),
             "critical_findings": counts.get("critical", 0),
             "important_findings": counts.get("important", 0),
             "update_findings": counts.get("updates", 0),

@@ -29,7 +29,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.4.0"
+    assert manifest["version"] == "1.5.0-beta.1"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -101,7 +101,18 @@ def test_config_flow_has_bilingual_translations() -> None:
             "mode",
             "notify",
         }
-        assert set(translation["exceptions"]) == {"not_configured"}
+        assert set(translation["services"]) == {
+            "run_audit",
+            "acknowledge_finding",
+            "snooze_finding",
+            "ignore_finding",
+            "restore_finding",
+        }
+        assert set(translation["exceptions"]) == {
+            "not_configured",
+            "finding_not_found",
+            "finding_not_active",
+        }
         assert set(translation["issues"]) == {"github_token_invalid"}
         assert set(translation["selector"]["audit_mode"]["options"]) == {
             "daily",
@@ -116,6 +127,10 @@ def test_config_flow_has_bilingual_translations() -> None:
             "4",
             "5",
             "6",
+        }
+        assert set(translation["selector"]["snooze_days"]["options"]) == {
+            "7",
+            "30",
         }
         assert set(translation["entity"]) == {
             "sensor",
@@ -177,17 +192,41 @@ def test_services_yaml_is_valid() -> None:
         (INTEGRATION / "services.yaml").read_text(encoding="utf-8")
     )
 
-    assert "run_audit" in services
+    assert set(services) == {
+        "run_audit",
+        "acknowledge_finding",
+        "snooze_finding",
+        "ignore_finding",
+        "restore_finding",
+    }
     assert set(services["run_audit"]["fields"]) == {"mode", "notify"}
     assert (
         services["run_audit"]["fields"]["mode"]["selector"]["select"]["translation_key"]
         == "audit_mode"
     )
+    for action in (
+        "acknowledge_finding",
+        "snooze_finding",
+        "ignore_finding",
+        "restore_finding",
+    ):
+        assert "finding_id" in services[action]["fields"]
+    assert services["snooze_finding"]["fields"]["days"]["selector"]["select"] == {
+        "translation_key": "snooze_days",
+        "options": ["7", "30"],
+    }
 
 
 def test_service_icon_is_present() -> None:
     icons = json.loads((INTEGRATION / "icons.json").read_text(encoding="utf-8"))
 
+    assert set(icons["services"]) == {
+        "run_audit",
+        "acknowledge_finding",
+        "snooze_finding",
+        "ignore_finding",
+        "restore_finding",
+    }
     assert icons["services"]["run_audit"]["service"] == "mdi:refresh"
 
 
