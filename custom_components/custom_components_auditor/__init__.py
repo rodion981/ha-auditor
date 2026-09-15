@@ -47,12 +47,15 @@ from .const import (
 from .progress import audit_progress
 from .release import (
     _merge_changes,
+    add_tag_commit_shas,
     assess_available_update,
     assess_repository_health,
     assessment_needs_refresh,
     classification_reason,
     classify_release_details,
+    find_release_for_version,
     localize,
+    release_version_is_commit_sha,
     summarize_release,
     tags_as_release_candidates,
 )
@@ -365,7 +368,11 @@ class ComponentsAuditor:
                 ):
                     etag = None
                 releases, etag, release_remaining = await self._fetch_releases(
-                    repository["repository"], etag
+                    repository["repository"],
+                    etag,
+                    repository["latest_version"]
+                    if repository["update_available"]
+                    else "",
                 )
                 if release_remaining is not None:
                     rate_remaining = release_remaining
@@ -707,7 +714,7 @@ class ComponentsAuditor:
         return payload, remaining
 
     async def _fetch_releases(
-        self, repository: str, etag: str | None
+        self, repository: str, etag: str | None, latest_version: str
     ) -> tuple[list[dict[str, Any]] | None, str | None, int | None]:
         payload, response_etag, remaining = await self._github_get(
             repository, "releases?per_page=10", etag
@@ -720,8 +727,23 @@ class ComponentsAuditor:
                 localize(self.messages, "error_network", error="invalid releases"),
             )
         if payload:
+            releases = [dict(item, source="release") for item in payload]
+            if release_version_is_commit_sha(latest_version) and not (
+                find_release_for_version(releases, latest_version)
+            ):
+                tags, _tag_etag, tag_remaining = await self._github_get(
+                    repository, "tags?per_page=100"
+                )
+                if not isinstance(tags, list):
+                    raise GitHubRequestError(
+                        "github",
+                        localize(self.messages, "error_network", error="invalid tags"),
+                    )
+                releases = add_tag_commit_shas(releases, tags)
+                if tag_remaining is not None:
+                    remaining = tag_remaining
             return (
-                [dict(item, source="release") for item in payload],
+                releases,
                 response_etag,
                 remaining,
             )
@@ -747,7 +769,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.3.0-beta.4",
+            "User-Agent": "HA-Auditor/1.3.0-beta.5",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"

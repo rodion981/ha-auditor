@@ -12,7 +12,7 @@ MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)]\([^)]+\)")
 MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
-CLASSIFICATION_VERSION = 3
+CLASSIFICATION_VERSION = 4
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 RESOLVED_DEPRECATION_WARNING_RE = re.compile(
     r"\b(?:fix(?:ed|es|ing)?|resolv(?:e|ed|es|ing)|silenc(?:e|ed|es|ing))\b"
@@ -155,16 +155,40 @@ def find_release_for_version(
             return release
     if COMMIT_SHA_RE.fullmatch(target):
         for release in releases:
-            commit = (
-                str(release.get("target_commitish") or release.get("commit_sha") or "")
-                .strip()
-                .casefold()
-            )
-            if COMMIT_SHA_RE.fullmatch(commit) and (
-                commit.startswith(target) or target.startswith(commit)
-            ):
-                return release
+            for field in ("target_commitish", "commit_sha"):
+                commit = str(release.get(field) or "").strip().casefold()
+                if COMMIT_SHA_RE.fullmatch(commit) and (
+                    commit.startswith(target) or target.startswith(commit)
+                ):
+                    return release
     return None
+
+
+def release_version_is_commit_sha(version: Any) -> bool:
+    """Return whether a HACS version looks like a short or full commit SHA."""
+    return COMMIT_SHA_RE.fullmatch(normalize_release_version(version)) is not None
+
+
+def add_tag_commit_shas(
+    releases: list[dict[str, Any]], tags: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Attach tag commit SHAs to matching GitHub Release records."""
+    tag_commits: dict[str, str] = {}
+    for tag in tags:
+        name = normalize_release_version(tag.get("name"))
+        commit = tag.get("commit") if isinstance(tag.get("commit"), Mapping) else {}
+        sha = str(commit.get("sha") or "").strip()
+        if name and sha:
+            tag_commits[name] = sha
+
+    enriched: list[dict[str, Any]] = []
+    for release in releases:
+        candidate = dict(release)
+        sha = tag_commits.get(normalize_release_version(release.get("tag_name")))
+        if sha:
+            candidate["commit_sha"] = sha
+        enriched.append(candidate)
+    return enriched
 
 
 def assessment_needs_refresh(assessment: Any, latest_version: Any) -> bool:

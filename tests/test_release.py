@@ -137,6 +137,40 @@ def test_release_version_does_not_match_unrelated_commit_sha() -> None:
     assert release.find_release_for_version([candidate], "abcdef0") is None
 
 
+def test_release_with_branch_target_matches_enriched_tag_commit() -> None:
+    candidates = release.add_tag_commit_shas(
+        [
+            {
+                "tag_name": "v1.3.0-beta.4",
+                "target_commitish": "main",
+            }
+        ],
+        [
+            {
+                "name": "v1.3.0-beta.4",
+                "commit": {"sha": "051c27199360dd5fd7ab7d12de56b3fdae38e628"},
+            }
+        ],
+    )
+
+    assert candidates[0]["commit_sha"].startswith("051c271")
+    assert release.find_release_for_version(candidates, "051c271") is candidates[0]
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ("051c271", True),
+        ("051c27199360dd5fd7ab7d12de56b3fdae38e628", True),
+        ("v1.3.0-beta.4", False),
+        ("main", False),
+        ("abc123", False),
+    ],
+)
+def test_commit_sha_detection(version: str, expected: bool) -> None:
+    assert release.release_version_is_commit_sha(version) is expected
+
+
 def test_available_update_is_assessed_on_the_first_audit() -> None:
     repository = {
         "repository": "owner/component",

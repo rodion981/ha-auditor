@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0-beta.5
+
+- Resolve HACS commit-SHA versions through the commit referenced by a matching
+  GitHub tag when a Release reports a branch such as `main` as its target.
+- Refresh cached update assessments for the expanded SHA matching.
+
 ## 1.3.0-beta.4
 
 - Match HACS commit-SHA versions to GitHub Releases and tag commits.
