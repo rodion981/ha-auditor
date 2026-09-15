@@ -56,4 +56,6 @@ class AuditorAttentionBinarySensor(AuditorEntity, BinarySensorEntity):
             "archived_repositories": health.get("archived", 0),
             "abandoned_repositories": health.get("abandoned", 0),
             "partial_audit": self.manager.data.get("partial_audit", False),
+            "deferred_components": self.manager.data.get("deferred_components", 0),
+            "cycle_complete": self.manager.data.get("cycle_complete", False),
         }

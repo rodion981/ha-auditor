@@ -6,12 +6,16 @@ cards:
       {% set status = state_attr(entity, 'status') %}
       {% set checked = state_attr(entity, 'checked_this_run') | int(0) %}
       {% set targeted = state_attr(entity, 'targeted_this_run') | int(0) %}
+      {% set total = state_attr(entity, 'total_components') | int(0) %}
+      {% set deferred = state_attr(entity, 'deferred_components') | int(0) %}
+      {% set cycle_complete = state_attr(entity, 'cycle_complete') %}
       {% set updates = state_attr(entity, 'available_updates') or [] %}
       {% set health = state_attr(entity, 'repository_health_details') or [] %}
       {% set excluded = state_attr(entity, 'excluded_components') | int(0) %}
       ## HACS release audit
       Status: **{{ status or 'not run' }}**<br>
-      Checked: **{{ checked }}/{{ targeted }}**<br>
+      Checked: **{{ checked }}/{{ targeted }}** selected, **{{ total }}** total<br>
+      {% if cycle_complete %}Inventory coverage: **complete**{% else %}Deferred: **{{ deferred }}**{% endif %}<br>
       Excluded: **{{ excluded }}**<br>
       Attention required: **{{ states('binary_sensor.ha_auditor_attention_required') }}**
 

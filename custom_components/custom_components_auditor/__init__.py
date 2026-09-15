@@ -44,6 +44,7 @@ from .const import (
     STORE_VERSION,
     TOKEN_REPAIR_ISSUE_ID,
 )
+from .progress import audit_progress
 from .release import (
     _merge_changes,
     assess_available_update,
@@ -493,8 +494,13 @@ class ComponentsAuditor:
             category = error["category"]
             error_counts[category] = error_counts.get(category, 0) + 1
         self._sync_token_repair(error_counts.get("authentication", 0) > 0)
-        not_attempted = max(len(selected) - attempted, 0)
-        partial_audit = bool(error_details or not_attempted)
+        progress = audit_progress(
+            total,
+            len(selected),
+            attempted,
+            checked_successfully,
+            len(error_details),
+        )
 
         return {
             "components": component_state,
@@ -503,8 +509,7 @@ class ComponentsAuditor:
             "targeted_this_run": len(selected),
             "attempted_this_run": attempted,
             "checked_this_run": checked_successfully,
-            "not_attempted_this_run": not_attempted,
-            "partial_audit": partial_audit,
+            **progress,
             "new_release_count": len(changes),
             "counts": counts,
             "last_run_changes": changes[:12],
@@ -742,7 +747,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.3.0-beta.3",
+            "User-Agent": "HA-Auditor/1.3.0-beta.4",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -1051,7 +1056,9 @@ class ComponentsAuditor:
             "attempted_this_run": self.data.get("attempted_this_run", 0),
             "checked_this_run": self.data.get("checked_this_run", 0),
             "not_attempted_this_run": self.data.get("not_attempted_this_run", 0),
+            "deferred_components": self.data.get("deferred_components", 0),
             "partial_audit": self.data.get("partial_audit", False),
+            "cycle_complete": self.data.get("cycle_complete", False),
             "new_release_count": self.data.get("new_release_count", 0),
             "critical": counts.get("critical", 0),
             "important": counts.get("important", 0),

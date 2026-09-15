@@ -12,7 +12,8 @@ MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)]\([^)]+\)")
 MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
-CLASSIFICATION_VERSION = 2
+CLASSIFICATION_VERSION = 3
+COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 RESOLVED_DEPRECATION_WARNING_RE = re.compile(
     r"\b(?:fix(?:ed|es|ing)?|resolv(?:e|ed|es|ing)|silenc(?:e|ed|es|ing))\b"
     r"[^\n.;]{0,100}\bdeprecat(?:ed|ion)?\s+warnings?\b"
@@ -152,6 +153,17 @@ def find_release_for_version(
     for release in releases:
         if normalize_release_version(release.get("tag_name")) == target:
             return release
+    if COMMIT_SHA_RE.fullmatch(target):
+        for release in releases:
+            commit = (
+                str(release.get("target_commitish") or release.get("commit_sha") or "")
+                .strip()
+                .casefold()
+            )
+            if COMMIT_SHA_RE.fullmatch(commit) and (
+                commit.startswith(target) or target.startswith(commit)
+            ):
+                return release
     return None
 
 
@@ -183,6 +195,8 @@ def tags_as_release_candidates(
                 "draft": False,
                 "prerelease": False,
                 "source": "tag",
+                "target_commitish": sha,
+                "commit_sha": sha,
                 "html_url": (
                     f"https://github.com/{repository}/tree/{quote(name, safe='')}"
                 ),

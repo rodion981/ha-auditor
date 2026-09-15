@@ -123,6 +123,8 @@ The integration creates three native Home Assistant entities:
 | `total_components` | Number of discovered HACS integrations. |
 | `targeted_this_run` | Repositories selected for the latest run. |
 | `checked_this_run` | Repositories checked successfully. |
+| `deferred_components` | Repositories deferred to later runs because the current unauthenticated batch is smaller than the discovered inventory. |
+| `cycle_complete` | `true` when the latest run checked the complete discovered inventory successfully. |
 | `updates_available` | Number of updates currently offered by HACS. |
 | `available_updates` | Installed/latest versions, attention level, reason, summary, release URL and `found` / `not_found` / `not_checked` release-note status for current updates. |
 | `available_update_counts` | Current available updates grouped as `critical`, `important`, `feature`, `minor` or `unknown`. |
@@ -136,8 +138,10 @@ The integration creates three native Home Assistant entities:
 | `error_details` | Failed checks grouped by error type. |
 | `github_rate_remaining` | Remaining GitHub API quota when available. |
 
-`partial` means at least one selected repository was not checked. The result is
-incomplete, so review `error_details` before relying on it.
+`partial` means at least one selected repository was not checked because of an
+error or interrupted request sequence. A successful unauthenticated batch stays
+`idle`; use `deferred_components` and `cycle_complete` to see whether that run
+covered the complete inventory.
 
 A ready-to-use native card is available in
 [`examples/dashboard.yaml`](examples/dashboard.yaml).

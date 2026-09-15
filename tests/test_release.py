@@ -119,6 +119,24 @@ def test_release_version_matching_handles_common_prefixes(
     assert release.find_release_for_version([candidate], version) is candidate
 
 
+def test_release_version_matching_handles_short_commit_sha() -> None:
+    candidate = {
+        "tag_name": "v1.3.0-beta.3",
+        "target_commitish": "8b7ff1ad5c5f95c31d88cd22291c3f484f7ae70e",
+    }
+
+    assert release.find_release_for_version([candidate], "8b7ff1a") is candidate
+
+
+def test_release_version_does_not_match_unrelated_commit_sha() -> None:
+    candidate = {
+        "tag_name": "v1.3.0-beta.3",
+        "target_commitish": "8b7ff1ad5c5f95c31d88cd22291c3f484f7ae70e",
+    }
+
+    assert release.find_release_for_version([candidate], "abcdef0") is None
+
+
 def test_available_update_is_assessed_on_the_first_audit() -> None:
     repository = {
         "repository": "owner/component",
@@ -197,7 +215,17 @@ def test_tags_are_used_as_release_candidates() -> None:
 
     assert candidates[0]["id"] == "tag:v2.0.0+build:abc123"
     assert candidates[0]["source"] == "tag"
+    assert candidates[0]["target_commitish"] == "abc123"
     assert candidates[0]["html_url"].endswith("/tree/v2.0.0%2Bbuild")
+
+
+def test_tag_fallback_matches_hacs_commit_sha() -> None:
+    candidates = release.tags_as_release_candidates(
+        "owner/component",
+        [{"name": "v2.0.0", "commit": {"sha": "abcdef0123456789"}}],
+    )
+
+    assert release.find_release_for_version(candidates, "abcdef0") is candidates[0]
 
 
 def test_available_update_reports_tag_fallback_without_fake_release_notes() -> None:

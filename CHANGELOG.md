@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0-beta.4
+
+- Match HACS commit-SHA versions to GitHub Releases and tag commits.
+- Separate successful unauthenticated batches from complete inventory coverage
+  with `deferred_components` and `cycle_complete` attributes.
+- Refresh cached update assessments for the improved release matching.
+
 ## 1.3.0-beta.3
 
 - Recalculate cached available-update assessments when classification rules change.
