@@ -12,6 +12,7 @@ MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)]\([^)]+\)")
 MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
+CLASSIFICATION_VERSION = 2
 RESOLVED_DEPRECATION_WARNING_RE = re.compile(
     r"\b(?:fix(?:ed|es|ing)?|resolv(?:e|ed|es|ing)|silenc(?:e|ed|es|ing))\b"
     r"[^\n.;]{0,100}\bdeprecat(?:ed|ion)?\s+warnings?\b"
@@ -154,6 +155,14 @@ def find_release_for_version(
     return None
 
 
+def assessment_needs_refresh(assessment: Any, latest_version: Any) -> bool:
+    """Return whether a cached available-update assessment must be rebuilt."""
+    return not isinstance(assessment, Mapping) or (
+        assessment.get("latest_version") != str(latest_version or "")
+        or assessment.get("classification_version") != CLASSIFICATION_VERSION
+    )
+
+
 def tags_as_release_candidates(
     repository: str, tags: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -232,6 +241,7 @@ def assess_available_update(
         "entity_id": str(repository.get("entity_id") or ""),
         "installed_version": str(repository.get("installed_version") or ""),
         "latest_version": latest_version,
+        "classification_version": CLASSIFICATION_VERSION,
     }
     release = find_release_for_version(releases, latest_version)
     if release is None:

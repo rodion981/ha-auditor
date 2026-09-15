@@ -145,8 +145,27 @@ def test_available_update_is_assessed_on_the_first_audit() -> None:
     assert assessment["severity"] == "important"
     assert assessment["matched_term"] == "security"
     assert assessment["latest_version"] == "1.1.0"
+    assert assessment["classification_version"] == release.CLASSIFICATION_VERSION
     assert assessment["summary"] == "Security fix for authentication handling"
     assert assessment["reason"] == "Read before updating, found: security."
+
+
+def test_cached_assessment_refreshes_after_classification_rules_change() -> None:
+    current = {
+        "latest_version": "2.0.0",
+        "classification_version": release.CLASSIFICATION_VERSION,
+    }
+
+    assert release.assessment_needs_refresh(None, "2.0.0") is True
+    assert release.assessment_needs_refresh(current, "2.0.0") is False
+    assert release.assessment_needs_refresh(current, "2.1.0") is True
+    assert (
+        release.assessment_needs_refresh(
+            {**current, "classification_version": release.CLASSIFICATION_VERSION - 1},
+            "2.0.0",
+        )
+        is True
+    )
 
 
 def test_available_update_reports_missing_matching_release() -> None:

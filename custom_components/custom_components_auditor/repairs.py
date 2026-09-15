@@ -69,7 +69,7 @@ async def _async_validate_token(hass: HomeAssistant, token: str) -> None:
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2026-03-10",
-        "User-Agent": "HA-Auditor/1.3.0-beta.2",
+        "User-Agent": "HA-Auditor/1.3.0-beta.3",
     }
     try:
         async with asyncio.timeout(20):

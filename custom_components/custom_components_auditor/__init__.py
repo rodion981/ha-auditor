@@ -48,6 +48,7 @@ from .release import (
     _merge_changes,
     assess_available_update,
     assess_repository_health,
+    assessment_needs_refresh,
     classification_reason,
     classify_release_details,
     localize,
@@ -357,9 +358,9 @@ class ComponentsAuditor:
                 if previous.get("release_source") != "release":
                     etag = None
                 if repository["update_available"] and (
-                    not isinstance(previous_assessment, Mapping)
-                    or previous_assessment.get("latest_version")
-                    != repository["latest_version"]
+                    assessment_needs_refresh(
+                        previous_assessment, repository["latest_version"]
+                    )
                 ):
                     etag = None
                 releases, etag, release_remaining = await self._fetch_releases(
@@ -741,7 +742,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.3.0-beta.2",
+            "User-Agent": "HA-Auditor/1.3.0-beta.3",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"

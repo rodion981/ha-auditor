@@ -1,7 +1,8 @@
 # Changelog
 
-## 1.3.0-beta.2
+## 1.3.0-beta.3
 
+- Recalculate cached available-update assessments when classification rules change.
 - Calibrate release classification from live audit evidence: resolved deprecation
   warnings no longer raise attention, and new options are categorized as features.
 - Add repository exclusions to the UI options flow.
