@@ -15,31 +15,41 @@ from homeassistant.components.repairs import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
 )
 
-from .const import CONF_GITHUB_TOKEN, TOKEN_REPAIR_ISSUE_ID
+from .config import requested_repair_token
+from .const import (
+    CONF_CLEAR_GITHUB_TOKEN,
+    CONF_GITHUB_TOKEN,
+    TOKEN_REPAIR_ISSUE_ID,
+)
 
 
 class GitHubTokenRepairFlow(RepairsFlow):
-    """Replace and validate an invalid or expired GitHub token."""
+    """Replace or remove an invalid or expired GitHub token."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> RepairsFlowResult:
-        """Validate a replacement token and update the config entry."""
+        """Validate a replacement or remove the rejected token."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            token = str(user_input[CONF_GITHUB_TOKEN]).strip()
-            try:
-                await _async_validate_token(self.hass, token)
-            except InvalidTokenError:
-                errors["base"] = "invalid_auth"
-            except CannotConnectError:
-                errors["base"] = "cannot_connect"
-            else:
+            token = requested_repair_token(user_input)
+            if token is None:
+                errors["base"] = "token_required"
+            elif token:
+                try:
+                    await _async_validate_token(self.hass, token)
+                except InvalidTokenError:
+                    errors["base"] = "invalid_auth"
+                except CannotConnectError:
+                    errors["base"] = "cannot_connect"
+
+            if token is not None and not errors:
                 entry_id = str((self.data or {}).get("entry_id") or "")
                 entry = self.hass.config_entries.async_get_entry(entry_id)
                 if entry is None:
@@ -53,9 +63,12 @@ class GitHubTokenRepairFlow(RepairsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_GITHUB_TOKEN): TextSelector(
+                    vol.Optional(CONF_GITHUB_TOKEN): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.PASSWORD)
-                    )
+                    ),
+                    vol.Optional(
+                        CONF_CLEAR_GITHUB_TOKEN, default=False
+                    ): BooleanSelector(),
                 }
             ),
             errors=errors,
@@ -69,7 +82,7 @@ async def _async_validate_token(hass: HomeAssistant, token: str) -> None:
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2026-03-10",
-        "User-Agent": "HA-Auditor/1.3.0-beta.5",
+        "User-Agent": "HA-Auditor/1.3.0-beta.6",
     }
     try:
         async with asyncio.timeout(20):

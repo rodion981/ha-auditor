@@ -165,8 +165,8 @@ notes or a risk classification. Repository metadata is also checked for the
 GitHub `archived` flag and for a last push at least 730 days ago.
 
 If GitHub rejects a configured token, HA Auditor creates a fixable Home
-Assistant Repair. The repair flow validates a replacement token before saving
-it.
+Assistant Repair. The repair flow can validate and save a replacement token or
+remove the rejected token and continue with unauthenticated batches.
 
 ## Limitations
 

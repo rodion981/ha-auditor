@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0-beta.6
+
+- Show the GitHub rate-limit reset as a localized date and time instead of a
+  raw Unix timestamp.
+- Let the invalid-token Repair either validate a replacement token or remove the
+  rejected token and continue without authentication.
+
 ## 1.3.0-beta.5
 
 - Resolve HACS commit-SHA versions through the commit referenced by a matching

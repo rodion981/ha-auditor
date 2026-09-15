@@ -55,6 +55,7 @@ from .release import (
     classify_release_details,
     find_release_for_version,
     localize,
+    parse_rate_limit_reset,
     release_version_is_commit_sha,
     summarize_release,
     tags_as_release_candidates,
@@ -769,7 +770,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.3.0-beta.5",
+            "User-Agent": "HA-Auditor/1.3.0-beta.6",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -798,7 +799,13 @@ class ComponentsAuditor:
                     if response.status == 429 or (
                         response.status == 403 and remaining == 0
                     ):
-                        reset = response.headers.get("X-RateLimit-Reset", "unknown")
+                        reset_raw = response.headers.get("X-RateLimit-Reset", "unknown")
+                        reset_at = parse_rate_limit_reset(reset_raw)
+                        reset = (
+                            dt_util.as_local(reset_at).strftime("%Y-%m-%d %H:%M %Z")
+                            if reset_at is not None
+                            else reset_raw
+                        )
                         raise RateLimitReached(
                             localize(self.messages, "error_rate_limit", reset=reset)
                         )

@@ -191,6 +191,17 @@ def add_tag_commit_shas(
     return enriched
 
 
+def parse_rate_limit_reset(value: Any) -> datetime | None:
+    """Parse GitHub's Unix reset timestamp without trusting malformed headers."""
+    try:
+        timestamp = int(str(value).strip())
+        if timestamp <= 0:
+            return None
+        return datetime.fromtimestamp(timestamp, UTC)
+    except (OSError, OverflowError, TypeError, ValueError):
+        return None
+
+
 def assessment_needs_refresh(assessment: Any, latest_version: Any) -> bool:
     """Return whether a cached available-update assessment must be rebuilt."""
     return not isinstance(assessment, Mapping) or (

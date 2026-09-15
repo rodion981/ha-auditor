@@ -29,7 +29,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.3.0-beta.5"
+    assert manifest["version"] == "1.3.0-beta.6"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -209,6 +209,8 @@ def test_fixable_github_token_repair_is_packaged() -> None:
     assert "is_fixable=True" in integration
     assert "is_persistent=True" in integration
     assert "async_remove_entry" in integration
+    assert "CONF_CLEAR_GITHUB_TOKEN" in repairs
+    assert "BooleanSelector" in repairs
 
 
 def test_integration_brand_icon_is_packaged_locally() -> None:

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .const import (
+    CONF_CLEAR_GITHUB_TOKEN,
     CONF_DAILY_HOUR,
     CONF_EXCLUDED_REPOSITORIES,
     CONF_GITHUB_TOKEN,
@@ -18,6 +19,14 @@ from .const import (
     DEFAULT_NOTIFY_SERVICE,
     DEFAULT_WEEKLY_WEEKDAY,
 )
+
+
+def requested_repair_token(user_input: Mapping[str, Any]) -> str | None:
+    """Return the replacement token, an empty removal request, or no choice."""
+    if bool(user_input.get(CONF_CLEAR_GITHUB_TOKEN, False)):
+        return ""
+    token = str(user_input.get(CONF_GITHUB_TOKEN) or "").strip()
+    return token or None
 
 
 def normalize_settings(*sources: Mapping[str, Any]) -> dict[str, Any]:

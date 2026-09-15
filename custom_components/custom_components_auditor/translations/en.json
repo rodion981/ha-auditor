@@ -77,19 +77,22 @@
       "fix_flow": {
         "step": {
           "init": {
-            "title": "Replace the GitHub token",
-            "description": "GitHub rejected the configured token. Enter a replacement token. It will be validated before it is saved.",
+            "title": "Repair GitHub access",
+            "description": "GitHub rejected the configured token. Enter a replacement token or remove the rejected token to continue without authentication.",
             "data": {
-              "github_token": "New GitHub token"
+              "github_token": "New GitHub token",
+              "clear_github_token": "Remove the rejected GitHub token"
             },
             "data_description": {
-              "github_token": "Use a read-only token. HA Auditor does not display or log this value."
+              "github_token": "Optional when token removal is enabled. Use a read-only token; HA Auditor does not display or log it.",
+              "clear_github_token": "Continue with lower-limit unauthenticated batches instead of saving a replacement."
             }
           }
         },
         "error": {
           "invalid_auth": "GitHub rejected this token.",
-          "cannot_connect": "GitHub could not be reached. Try again later."
+          "cannot_connect": "GitHub could not be reached. Try again later.",
+          "token_required": "Enter a replacement token or enable token removal."
         },
         "abort": {
           "entry_missing": "The HA Auditor configuration entry no longer exists."
@@ -129,7 +132,7 @@
     "repository_status_archived": "Repository archived",
     "repository_status_abandoned": "No repository activity for over two years",
     "error_authentication_401": "GitHub rejected the token (401). Check or replace it.",
-    "error_rate_limit": "The GitHub rate limit is exhausted; reset: {reset}",
+    "error_rate_limit": "The GitHub rate limit is exhausted; requests should be available again around {reset}.",
     "error_authentication_403": "GitHub denied access (403). Check the token permissions.",
     "error_repository_not_found": "Repository {repository} was not found or is unavailable.",
     "error_github_status": "GitHub is temporarily unavailable (HTTP {status}).",

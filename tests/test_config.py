@@ -32,11 +32,13 @@ config = _load_module(f"{PACKAGE_NAME}.config", INTEGRATION / "config.py")
 
 normalize_settings = config.normalize_settings
 CONF_DAILY_HOUR = const.CONF_DAILY_HOUR
+CONF_CLEAR_GITHUB_TOKEN = const.CONF_CLEAR_GITHUB_TOKEN
 CONF_EXCLUDED_REPOSITORIES = const.CONF_EXCLUDED_REPOSITORIES
 CONF_GITHUB_TOKEN = const.CONF_GITHUB_TOKEN
 CONF_MAX_REQUESTS = const.CONF_MAX_REQUESTS
 CONF_NOTIFY_SERVICE = const.CONF_NOTIFY_SERVICE
 CONF_WEEKLY_WEEKDAY = const.CONF_WEEKLY_WEEKDAY
+requested_repair_token = config.requested_repair_token
 
 
 def test_normalize_settings_supplies_ui_defaults() -> None:
@@ -88,6 +90,26 @@ def test_excluded_repositories_are_normalized_and_deduplicated() -> None:
         "another/integration",
         "owner/repo",
     ]
+
+
+def test_repair_token_choice_can_replace_or_remove_token() -> None:
+    assert requested_repair_token({CONF_GITHUB_TOKEN: " replacement "}) == (
+        "replacement"
+    )
+    assert requested_repair_token({CONF_CLEAR_GITHUB_TOKEN: True}) == ""
+    assert requested_repair_token({}) is None
+
+
+def test_repair_token_removal_wins_over_a_typed_replacement() -> None:
+    assert (
+        requested_repair_token(
+            {
+                CONF_GITHUB_TOKEN: "replacement",
+                CONF_CLEAR_GITHUB_TOKEN: True,
+            }
+        )
+        == ""
+    )
 
 
 @pytest.mark.parametrize(

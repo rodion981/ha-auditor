@@ -171,6 +171,18 @@ def test_commit_sha_detection(version: str, expected: bool) -> None:
     assert release.release_version_is_commit_sha(version) is expected
 
 
+def test_rate_limit_reset_timestamp_is_parsed_as_utc() -> None:
+    reset_at = release.parse_rate_limit_reset("1789450430")
+
+    assert reset_at is not None
+    assert reset_at.isoformat() == "2026-09-15T05:33:50+00:00"
+
+
+@pytest.mark.parametrize("value", ["unknown", "", "0", "-1", None])
+def test_invalid_rate_limit_reset_timestamp_is_ignored(value: object) -> None:
+    assert release.parse_rate_limit_reset(value) is None
+
+
 def test_available_update_is_assessed_on_the_first_audit() -> None:
     repository = {
         "repository": "owner/component",
