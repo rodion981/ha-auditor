@@ -32,6 +32,22 @@ MESSAGES = json.loads(
 
 
 @pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("KidsChores Update", "KidsChores"),
+        ("Swipe Card update  ", "Swipe Card"),
+        ("Updater", "Updater"),
+        ("Update", "Update"),
+        ("Repository Name", "Repository Name"),
+    ],
+)
+def test_component_title_removes_only_the_update_suffix(
+    title: str, expected: str
+) -> None:
+    assert release.normalize_component_title(title) == expected
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("BREAKING CHANGE: migrate the configuration", "critical"),

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+
+- Add persistent actionable findings and separate component attention from audit
+  failures after successful beta validation in Home Assistant.
+- Remove the generic trailing `Update` suffix from HACS component names while
+  preserving names where those characters are part of the actual title.
+
 ## 1.4.0-beta.1
 
 - Add persistent actionable findings for critical and important updates,

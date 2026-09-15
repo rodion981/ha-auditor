@@ -12,6 +12,7 @@ MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)]\([^)]+\)")
 MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
+UPDATE_SUFFIX_RE = re.compile(r"\s+update\s*$", re.IGNORECASE)
 CLASSIFICATION_VERSION = 4
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 RESOLVED_DEPRECATION_WARNING_RE = re.compile(
@@ -65,6 +66,12 @@ FEATURE_TERMS = (
     "нова можливість",
     "підтримку",
 )
+
+
+def normalize_component_title(title: str) -> str:
+    """Remove the generic HACS update-entity suffix from a component title."""
+    normalized = title.strip()
+    return UPDATE_SUFFIX_RE.sub("", normalized) or normalized
 
 
 def classify_release(text: str) -> str:

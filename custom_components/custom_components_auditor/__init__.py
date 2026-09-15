@@ -60,6 +60,7 @@ from .release import (
     classify_release_details,
     find_release_for_version,
     localize,
+    normalize_component_title,
     parse_rate_limit_reset,
     release_version_is_commit_sha,
     summarize_release,
@@ -707,10 +708,12 @@ class ComponentsAuditor:
             found[key] = {
                 "repository": repository,
                 "entity_id": entry.entity_id,
-                "title": str(
-                    attributes.get("title")
-                    or attributes.get("friendly_name")
-                    or repository
+                "title": normalize_component_title(
+                    str(
+                        attributes.get("title")
+                        or attributes.get("friendly_name")
+                        or repository
+                    )
                 ),
                 "installed_version": str(attributes.get("installed_version") or ""),
                 "latest_version": str(attributes.get("latest_version") or ""),
@@ -792,7 +795,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.4.0-beta.1",
+            "User-Agent": "HA-Auditor/1.4.0",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
