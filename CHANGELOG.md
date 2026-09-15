@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0
+
+- Add repository exclusions to the UI options flow.
+- Fall back to GitHub Tags when a repository has no Releases.
+- Detect archived repositories and repositories with no push for 730 days.
+- Add a fixable Home Assistant Repair that can validate a replacement GitHub
+  token or remove a rejected token.
+- Match HACS commit-SHA versions to the corresponding GitHub Release and tag.
+- Show readable Home Assistant-local GitHub rate-limit reset times.
+- Separate successful batches, complete inventory coverage and partial runs.
+- Report configured-token state separately from successful authentication.
+
 ## 1.3.0-beta.7
 
 - Treat Home Assistant's initial Repair `issue_id` payload as flow metadata,

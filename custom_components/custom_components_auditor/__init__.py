@@ -772,7 +772,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.3.0-beta.7",
+            "User-Agent": "HA-Auditor/1.3.0",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
