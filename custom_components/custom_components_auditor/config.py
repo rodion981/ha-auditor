@@ -29,6 +29,13 @@ def requested_repair_token(user_input: Mapping[str, Any]) -> str | None:
     return token or None
 
 
+def repair_token_choice_submitted(user_input: Mapping[str, Any] | None) -> bool:
+    """Return whether the Repair payload contains an actual user choice."""
+    return user_input is not None and (
+        CONF_GITHUB_TOKEN in user_input or CONF_CLEAR_GITHUB_TOKEN in user_input
+    )
+
+
 def normalize_settings(*sources: Mapping[str, Any]) -> dict[str, Any]:
     """Merge and normalize YAML, config-entry and options values."""
     settings: dict[str, Any] = {

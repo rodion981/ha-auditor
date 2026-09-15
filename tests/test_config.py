@@ -39,6 +39,7 @@ CONF_MAX_REQUESTS = const.CONF_MAX_REQUESTS
 CONF_NOTIFY_SERVICE = const.CONF_NOTIFY_SERVICE
 CONF_WEEKLY_WEEKDAY = const.CONF_WEEKLY_WEEKDAY
 requested_repair_token = config.requested_repair_token
+repair_token_choice_submitted = config.repair_token_choice_submitted
 
 
 def test_normalize_settings_supplies_ui_defaults() -> None:
@@ -98,6 +99,13 @@ def test_repair_token_choice_can_replace_or_remove_token() -> None:
     )
     assert requested_repair_token({CONF_CLEAR_GITHUB_TOKEN: True}) == ""
     assert requested_repair_token({}) is None
+
+
+def test_repair_flow_ignores_home_assistant_issue_metadata() -> None:
+    assert repair_token_choice_submitted({"issue_id": "github_token_invalid"}) is False
+    assert repair_token_choice_submitted(None) is False
+    assert repair_token_choice_submitted({CONF_GITHUB_TOKEN: "replacement"}) is True
+    assert repair_token_choice_submitted({CONF_CLEAR_GITHUB_TOKEN: False}) is True
 
 
 def test_repair_token_removal_wins_over_a_typed_replacement() -> None:

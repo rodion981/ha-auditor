@@ -501,7 +501,8 @@ class ComponentsAuditor:
         for error in error_details:
             category = error["category"]
             error_counts[category] = error_counts.get(category, 0) + 1
-        self._sync_token_repair(error_counts.get("authentication", 0) > 0)
+        authentication_failed = error_counts.get("authentication", 0) > 0
+        self._sync_token_repair(authentication_failed)
         progress = audit_progress(
             total,
             len(selected),
@@ -538,7 +539,8 @@ class ComponentsAuditor:
             "error_details": error_details[:10],
             "error_counts": error_counts,
             "cursor": next_cursor,
-            "github_authenticated": bool(self.token),
+            "github_token_configured": bool(self.token),
+            "github_authenticated": bool(self.token) and not authentication_failed,
             "github_rate_remaining": rate_remaining,
         }
 
@@ -770,7 +772,7 @@ class ComponentsAuditor:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.3.0-beta.6",
+            "User-Agent": "HA-Auditor/1.3.0-beta.7",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -1125,6 +1127,9 @@ class ComponentsAuditor:
             "error_counts": self.data.get("error_counts", {}),
             "github_authenticated": self.data.get(
                 "github_authenticated", bool(self.token)
+            ),
+            "github_token_configured": self.data.get(
+                "github_token_configured", bool(self.token)
             ),
             "github_rate_remaining": self.data.get("github_rate_remaining"),
             "last_error": self.data.get("last_error", ""),

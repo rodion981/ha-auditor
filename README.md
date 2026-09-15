@@ -136,6 +136,8 @@ The integration creates three native Home Assistant entities:
 | `last_run_changes` | Releases discovered during the latest run. |
 | `pending_digest_changes` | Releases waiting for the weekly digest. |
 | `error_details` | Failed checks grouped by error type. |
+| `github_token_configured` | Whether a GitHub token is currently configured. |
+| `github_authenticated` | Whether the configured token was accepted during the latest run. |
 | `github_rate_remaining` | Remaining GitHub API quota when available. |
 
 `partial` means at least one selected repository was not checked because of an

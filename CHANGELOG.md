@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0-beta.7
+
+- Treat Home Assistant's initial Repair `issue_id` payload as flow metadata,
+  so the invalid-token form opens with its fields instead of appearing empty.
+- Report a configured token separately from successful GitHub authentication.
+
 ## 1.3.0-beta.6
 
 - Show the GitHub rate-limit reset as a localized date and time instead of a

@@ -21,7 +21,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .config import requested_repair_token
+from .config import repair_token_choice_submitted, requested_repair_token
 from .const import (
     CONF_CLEAR_GITHUB_TOKEN,
     CONF_GITHUB_TOKEN,
@@ -37,7 +37,10 @@ class GitHubTokenRepairFlow(RepairsFlow):
     ) -> RepairsFlowResult:
         """Validate a replacement or remove the rejected token."""
         errors: dict[str, str] = {}
-        if user_input is not None:
+        # Home Assistant 2026.9 passes {"issue_id": ...} to async_step_init
+        # when opening a Repair. It is flow metadata, not a submitted form.
+        if repair_token_choice_submitted(user_input):
+            assert user_input is not None
             token = requested_repair_token(user_input)
             if token is None:
                 errors["base"] = "token_required"
@@ -82,7 +85,7 @@ async def _async_validate_token(hass: HomeAssistant, token: str) -> None:
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2026-03-10",
-        "User-Agent": "HA-Auditor/1.3.0-beta.6",
+        "User-Agent": "HA-Auditor/1.3.0-beta.7",
     }
     try:
         async with asyncio.timeout(20):
