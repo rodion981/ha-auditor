@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0
+
+- Add native actions to acknowledge, snooze, ignore and restore active findings.
+- Expose a stable `finding_id` and localized review status for every finding.
+- Split active finding counts into new, acknowledged, snoozed and ignored.
+- Make the attention binary sensor represent new, unreviewed findings only.
+- Reopen snoozed findings after 7 or 30 days without requiring another audit.
+- Reopen acknowledged, snoozed or ignored update findings when their available
+  version changes.
+- Promote the finding review workflow after live Home Assistant validation,
+  including persistence across a Home Assistant restart.
+
 ## 1.5.0-beta.1
 
 - Add native actions to acknowledge, snooze, ignore and restore active findings.
