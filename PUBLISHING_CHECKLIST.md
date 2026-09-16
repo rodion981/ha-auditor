@@ -38,7 +38,7 @@ Release preparation for `rodion981/ha-auditor`.
 - [x] Owner explicitly approves pushing and publishing `1.5.0`.
 - [x] Publish a stable release whose tag matches `1.5.0`.
 - [x] Owner explicitly approves pushing and publishing `1.5.1`.
-- [ ] Publish a stable release whose tag matches `1.5.1`.
+- [x] Publish a stable release whose tag matches `1.5.1`.
 
 The live Home Assistant test and GitHub release remain separate gates. A
 green local suite is not evidence that the integration has passed hassfest or a
