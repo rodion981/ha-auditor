@@ -231,8 +231,10 @@ remove the rejected token and continue with unauthenticated batches.
   critical or important.
 - Tag-only repositories can be tracked, but a tag does not provide release notes
   or enough evidence for a risk classification.
-- If the HACS version cannot be matched to one of the ten latest GitHub Releases
-  or 100 latest Tags, the update is shown as `unknown` instead of guessing.
+- Without a token, HA Auditor searches up to 100 GitHub Releases and 100 Tags
+  for the exact HACS version. With a token, it follows at most three pages of
+  each source and stops as soon as the version is found. A remaining mismatch
+  is shown as `unknown` instead of guessing.
 - GitHub's unauthenticated API limit is lower, so larger installations should
   use a read-only token or process repositories in batches.
 

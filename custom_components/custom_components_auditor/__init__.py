@@ -41,6 +41,8 @@ from .const import (
     DEFAULT_NOTIFY_SERVICE,
     DEFAULT_WEEKLY_WEEKDAY,
     DOMAIN,
+    GITHUB_MAX_AUTHENTICATED_PAGES,
+    GITHUB_PAGE_SIZE,
     MESSAGE_KEYS,
     SERVICE_ACKNOWLEDGE_FINDING,
     SERVICE_IGNORE_FINDING,
@@ -895,7 +897,7 @@ class ComponentsAuditor:
         self, repository: str
     ) -> tuple[dict[str, Any], int | None]:
         """Fetch repository status and activity metadata."""
-        payload, _etag, remaining = await self._github_get(repository, "")
+        payload, _etag, remaining, _has_next = await self._github_get(repository, "")
         if not isinstance(payload, dict):
             raise GitHubRequestError(
                 "github",
@@ -906,8 +908,8 @@ class ComponentsAuditor:
     async def _fetch_releases(
         self, repository: str, etag: str | None, latest_version: str
     ) -> tuple[list[dict[str, Any]] | None, str | None, int | None]:
-        payload, response_etag, remaining = await self._github_get(
-            repository, "releases?per_page=10", etag
+        payload, response_etag, remaining, has_next = await self._github_get(
+            repository, f"releases?per_page={GITHUB_PAGE_SIZE}&page=1", etag
         )
         if payload is None:
             return None, response_etag, remaining
@@ -918,18 +920,49 @@ class ComponentsAuditor:
             )
         if payload:
             releases = [dict(item, source="release") for item in payload]
-            if release_version_is_commit_sha(latest_version) and not (
-                find_release_for_version(releases, latest_version)
+            max_pages = GITHUB_MAX_AUTHENTICATED_PAGES if self.token else 1
+            page = 1
+            while (
+                latest_version
+                and find_release_for_version(releases, latest_version) is None
+                and has_next
+                and page < max_pages
             ):
-                tags, _tag_etag, tag_remaining = await self._github_get(
-                    repository, "tags?per_page=100"
+                page += 1
+                (
+                    page_payload,
+                    _page_etag,
+                    page_remaining,
+                    has_next,
+                ) = await self._github_get(
+                    repository,
+                    f"releases?per_page={GITHUB_PAGE_SIZE}&page={page}",
                 )
-                if not isinstance(tags, list):
+                if not isinstance(page_payload, list):
                     raise GitHubRequestError(
                         "github",
-                        localize(self.messages, "error_network", error="invalid tags"),
+                        localize(
+                            self.messages, "error_network", error="invalid releases"
+                        ),
                     )
-                releases = add_tag_commit_shas(releases, tags)
+                releases.extend(dict(item, source="release") for item in page_payload)
+                if page_remaining is not None:
+                    remaining = page_remaining
+
+            if latest_version and not find_release_for_version(
+                releases, latest_version
+            ):
+                tag_candidates, tags, tag_remaining = await self._fetch_tags(
+                    repository, latest_version
+                )
+                if release_version_is_commit_sha(latest_version):
+                    releases = add_tag_commit_shas(releases, tags)
+                if not find_release_for_version(releases, latest_version):
+                    matched_tag = find_release_for_version(
+                        tag_candidates, latest_version
+                    )
+                    if matched_tag is not None:
+                        releases.append(matched_tag)
                 if tag_remaining is not None:
                     remaining = tag_remaining
             return (
@@ -938,28 +971,55 @@ class ComponentsAuditor:
                 remaining,
             )
 
-        tags, _tag_etag, tag_remaining = await self._github_get(
-            repository, "tags?per_page=100"
+        tag_candidates, _tags, tag_remaining = await self._fetch_tags(
+            repository, latest_version
         )
-        if not isinstance(tags, list):
-            raise GitHubRequestError(
-                "github",
-                localize(self.messages, "error_network", error="invalid tags"),
-            )
         return (
-            tags_as_release_candidates(repository, tags),
+            tag_candidates,
             response_etag,
             tag_remaining if tag_remaining is not None else remaining,
         )
 
+    async def _fetch_tags(
+        self, repository: str, latest_version: str
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int | None]:
+        """Fetch bounded tag pages until the target version is found."""
+        tags: list[dict[str, Any]] = []
+        remaining: int | None = None
+        has_next = True
+        max_pages = (
+            GITHUB_MAX_AUTHENTICATED_PAGES if self.token and latest_version else 1
+        )
+
+        for page in range(1, max_pages + 1):
+            if not has_next:
+                break
+            payload, _etag, page_remaining, has_next = await self._github_get(
+                repository,
+                f"tags?per_page={GITHUB_PAGE_SIZE}&page={page}",
+            )
+            if not isinstance(payload, list):
+                raise GitHubRequestError(
+                    "github",
+                    localize(self.messages, "error_network", error="invalid tags"),
+                )
+            tags.extend(payload)
+            if page_remaining is not None:
+                remaining = page_remaining
+            candidates = tags_as_release_candidates(repository, tags)
+            if latest_version and find_release_for_version(candidates, latest_version):
+                return candidates, tags, remaining
+
+        return tags_as_release_candidates(repository, tags), tags, remaining
+
     async def _github_get(
         self, repository: str, path: str, etag: str | None = None
-    ) -> tuple[Any, str | None, int | None]:
+    ) -> tuple[Any, str | None, int | None, bool]:
         """Fetch one GitHub API resource with shared error handling."""
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "HA-Auditor/1.5.1",
+            "User-Agent": "HA-Auditor/1.6.0-beta.1",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -978,8 +1038,9 @@ class ComponentsAuditor:
                         if remaining_raw and remaining_raw.isdigit()
                         else None
                     )
+                    has_next = 'rel="next"' in response.headers.get("Link", "")
                     if response.status == 304:
-                        return None, etag, remaining
+                        return None, etag, remaining, False
                     if response.status == 401:
                         raise GitHubRequestError(
                             "authentication",
@@ -1023,7 +1084,12 @@ class ComponentsAuditor:
                         )
                     response.raise_for_status()
                     payload = await response.json()
-                    return payload, response.headers.get("ETag"), remaining
+                    return (
+                        payload,
+                        response.headers.get("ETag"),
+                        remaining,
+                        has_next,
+                    )
         except (GitHubRequestError, RateLimitReached):
             raise
         except TimeoutError as err:

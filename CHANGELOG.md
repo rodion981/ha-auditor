@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0-beta.1
+
+- Search up to 100 GitHub Releases and Tags per request instead of only ten
+  Releases.
+- With an authenticated token, follow at most three GitHub pages and stop as
+  soon as the exact HACS target version is found.
+- Fall back to the matching Git tag when a repository has other Releases but
+  no Release for the version currently offered by HACS.
+- Keep unauthenticated audits bounded to one Releases page and one Tags page
+  per repository so the configured API budget remains predictable.
+
 ## 1.5.1
 
 - Add privacy-preserving Home Assistant diagnostics without tokens, repository
