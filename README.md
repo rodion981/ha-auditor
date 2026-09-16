@@ -258,7 +258,7 @@ notification payloads in public issues. See [`SECURITY.md`](SECURITY.md).
 python -m pip install -r requirements_test.txt
 python -m compileall -q custom_components
 ruff check custom_components tests
-pytest
+python -m pytest
 ```
 
 The Home Assistant runtime tests require Linux or WSL, Python 3.14 and a
@@ -267,7 +267,7 @@ native Windows runtime:
 
 ```bash
 python -m pip install -r requirements_runtime_test.txt
-pytest tests/test_runtime.py
+python -m pytest tests/test_runtime.py
 ```
 
 The automated suite covers release classification, negated breaking-change

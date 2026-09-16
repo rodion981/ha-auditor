@@ -260,7 +260,7 @@ HA Auditor працює всередині Home Assistant і звертаєть�
 python -m pip install -r requirements_test.txt
 python -m compileall -q custom_components
 ruff check custom_components tests
-pytest
+python -m pytest
 ```
 
 Runtime-тести Home Assistant потребують Linux або WSL, Python 3.14 й окремого
@@ -268,7 +268,7 @@ Runtime-тести Home Assistant потребують Linux або WSL, Python 
 
 ```bash
 python -m pip install -r requirements_runtime_test.txt
-pytest tests/test_runtime.py
+python -m pytest tests/test_runtime.py
 ```
 
 Автоматизовані тести перевіряють класифікацію релізів, заперечення фраз про
