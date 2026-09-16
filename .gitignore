@@ -5,6 +5,7 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.venv-ha/
 venv/
 
 # Home Assistant runtime and private configuration

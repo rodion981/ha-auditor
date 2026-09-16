@@ -243,6 +243,12 @@ repository metadata, Releases and Tags. It does not install updates, modify othe
 integrations or expose the saved token in its sensor. Notifications are sent
 only through the Home Assistant action explicitly configured by the user.
 
+Detailed entity attributes remain available for dashboards, templates and
+automations, but HA Auditor excludes them from Recorder history to avoid
+repeatedly storing large audit payloads. **Download diagnostics** exposes only
+configuration flags, progress and aggregate counts; it excludes the GitHub
+token, notification target and repository names.
+
 Do not include tokens, Home Assistant configuration, `.storage` data or
 notification payloads in public issues. See [`SECURITY.md`](SECURITY.md).
 
@@ -255,9 +261,21 @@ ruff check custom_components tests
 pytest
 ```
 
+The Home Assistant runtime tests require Linux or WSL, Python 3.14 and a
+separate environment because Home Assistant itself is not supported as a
+native Windows runtime:
+
+```bash
+python -m pip install -r requirements_runtime_test.txt
+pytest tests/test_runtime.py
+```
+
 The automated suite covers release classification, negated breaking-change
 phrases, summary sanitization, deduplication, configuration handling,
 translations, repository metadata, finding lifecycle and a basic secret scan.
+The runtime gate additionally loads the integration through Home Assistant,
+registers its entities and actions, verifies finding persistence across a
+config-entry reload and checks that diagnostics do not expose private values.
 
 Want to add another interface language? See
 [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-translation). Each locale is a

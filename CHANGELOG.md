@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.1
+
+- Add privacy-preserving Home Assistant diagnostics without tokens, repository
+  names or notification targets.
+- Keep detailed audit and finding attributes available in current state while
+  excluding them from Recorder history to prevent database growth.
+- Add a Home Assistant 2026.9 runtime test gate on Python 3.14 alongside the
+  existing dependency-free unit test matrix.
+- Clarify how the UI-configured GitHub token is stored and protected.
+
 ## 1.5.0
 
 - Add native actions to acknowledge, snooze, ignore and restore active findings.

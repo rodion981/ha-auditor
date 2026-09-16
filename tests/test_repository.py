@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 from pathlib import Path
 from string import Formatter
@@ -29,7 +30,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.5.0"
+    assert manifest["version"] == "1.5.1"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -292,12 +293,18 @@ def test_public_tree_does_not_contain_known_private_values_or_tokens() -> None:
     ignored_parts = {".git", ".pytest_cache", ".ruff_cache", "__pycache__"}
     text_suffixes = {".json", ".md", ".py", ".toml", ".txt", ".yaml", ".yml"}
 
-    for path in ROOT.rglob("*"):
-        if (
-            path.is_file()
-            and not ignored_parts.intersection(path.parts)
-            and path.suffix in text_suffixes
-        ):
+    for directory, directories, filenames in os.walk(ROOT, topdown=True):
+        directories[:] = [
+            name
+            for name in directories
+            if name not in ignored_parts
+            and name != "venv"
+            and not name.startswith(".venv")
+        ]
+        for filename in filenames:
+            path = Path(directory, filename)
+            if path.suffix not in text_suffixes:
+                continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             for marker in forbidden:
                 assert marker not in text, f"Private marker {marker!r} in {path}"

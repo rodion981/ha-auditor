@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 addopts = "-q"
+asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.ruff]
