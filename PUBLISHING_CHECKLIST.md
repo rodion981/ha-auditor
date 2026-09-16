@@ -48,8 +48,8 @@ live Home Assistant installation test.
 
 - [x] Add target-aware Releases and Tags lookup with bounded pagination.
 - [x] Pass the local compile, Ruff and 103-test runtime suite.
-- [ ] Pass hassfest and the complete remote test workflow.
+- [x] Pass hassfest and the complete remote test workflow.
 - [ ] Validate an update whose matching Release or Tag is outside the first ten
       GitHub results on a live Home Assistant instance.
-- [ ] Owner explicitly approves publishing `v1.6.0-beta.1`.
-- [ ] Publish the prerelease tag and GitHub Release.
+- [x] Owner explicitly approves publishing `v1.6.0-beta.1`.
+- [x] Publish the prerelease tag and GitHub Release.
