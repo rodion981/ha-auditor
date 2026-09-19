@@ -1,17 +1,25 @@
-<p align="center">
-  <img src="custom_components/custom_components_auditor/brand/icon.png" alt="HA Auditor" width="180">
-</p>
+# HA Auditor
 
-<h1 align="center">HA Auditor</h1>
+Перевіряйте оновлення HACS до їх встановлення.
 
-<p align="center">Дізнавайтеся про зміни в HACS-інтеграціях до їх встановлення.</p>
-
-<p align="center">
-  <a href="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml"><img src="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml/badge.svg" alt="Перевірка"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="Ліцензія MIT"></a>
-</p>
+[![GitHub Release](https://img.shields.io/github/v/release/rodion981/ha-auditor?display_name=tag&sort=semver)](https://github.com/rodion981/ha-auditor/releases)
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
+[![License](https://img.shields.io/github/license/rodion981/ha-auditor)](./LICENSE)
 
 [English](./README.md) | [**Українською**](./README.uk.md)
+
+## Швидке встановлення
+
+1. Відкрийте цей репозиторій у HACS кнопкою нижче та встановіть інтеграцію.
+2. Перезапустіть Home Assistant.
+3. Натисніть **Add Integration**, щоб запустити налаштування інтеграції.
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=rodion981&repository=ha-auditor&category=integration)
+
+[![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=custom_components_auditor)
+
+> [!NOTE]
+> Для кнопки HACS потрібен встановлений HACS. Кнопка Add Integration працюватиме після завантаження кастомної інтеграції та перезапуску Home Assistant.
 
 HA Auditor — це кастомна інтеграція Home Assistant для моніторингу оновлень
 інтеграцій, встановлених через HACS. Вона читає примітки до GitHub Releases,
@@ -29,7 +37,7 @@ HA Auditor — це кастомна інтеграція Home Assistant для 
 HA Auditor працює лише на читання. Він не встановлює оновлення й не змінює
 інші інтеграції.
 
-## Основні можливості
+## Можливості
 
 - Автоматично знаходить активні сутності оновлень HACS-інтеграцій.
 - Показує встановлені й доступні версії разом зі стислим описом відповідного
@@ -136,7 +144,7 @@ data:
 її причини. Нова версія оновлення отримує новий fingerprint і автоматично
 повертається до `new`, навіть якщо попередню версію вже переглянуто.
 
-## Як читати результат
+## Сутності
 
 Інтеграція створює п'ять нативних сутностей Home Assistant:
 
@@ -290,3 +298,7 @@ Python-код не потрібно.
 ## Ліцензія
 
 [MIT](LICENSE)
+
+## Підтримка
+
+Про помилки та пропозиції повідомляйте через [GitHub Issues](https://github.com/rodion981/ha-auditor/issues).
