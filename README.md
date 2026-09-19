@@ -10,7 +10,7 @@
   <a href="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml"><img src="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
 </p>
-[**English**](./readme.md) | [Українською](./readme.uk.md)
+
 HA Auditor is a Home Assistant custom integration for monitoring updates to
 integrations installed through HACS. It reads GitHub Release notes, highlights
 changes that may deserve attention, keeps actionable findings until they are
