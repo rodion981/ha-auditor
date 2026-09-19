@@ -1,17 +1,25 @@
-<p align="center">
-  <img src="custom_components/custom_components_auditor/brand/icon.png" alt="HA Auditor" width="180">
-</p>
+# HA Auditor
 
-<h1 align="center">HA Auditor</h1>
+Understand HACS updates before you install them.
 
-<p align="center">Understand HACS updates before you install them.</p>
-
-<p align="center">
-  <a href="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml"><img src="https://github.com/rodion981/ha-auditor/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
-</p>
+[![GitHub Release](https://img.shields.io/github/v/release/rodion981/ha-auditor?display_name=tag&sort=semver)](https://github.com/rodion981/ha-auditor/releases)
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
+[![License](https://img.shields.io/github/license/rodion981/ha-auditor)](./LICENSE)
 
 [**English**](./README.md) | [Українською](./README.uk.md)
+
+## Quick install
+
+1. Open this repository in HACS using the button below and download the integration.
+2. Restart Home Assistant.
+3. Use **Add Integration** to start the setup flow.
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=rodion981&repository=ha-auditor&category=integration)
+
+[![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=custom_components_auditor)
+
+> [!NOTE]
+> The HACS button requires HACS to be installed. The Add Integration button works after the custom integration has been downloaded and Home Assistant restarted.
 
 HA Auditor is a Home Assistant custom integration for monitoring updates to
 integrations installed through HACS. It reads GitHub Release notes, highlights
@@ -29,7 +37,7 @@ It helps you answer three questions before updating:
 HA Auditor is read-only. It never installs updates or changes other
 integrations.
 
-## Highlights
+## Features
 
 - Finds enabled HACS integration update entities automatically.
 - Shows installed and available versions with the matching release summary.
@@ -132,7 +140,7 @@ The finding remains technically active until the auditor confirms that its
 underlying condition is gone. A new update version gets a new fingerprint and
 automatically returns to `new`, even when the previous version was reviewed.
 
-## Understanding the result
+## Entities
 
 The integration creates five native Home Assistant entities:
 
@@ -287,3 +295,7 @@ changes are needed.
 ## License
 
 [MIT](LICENSE)
+
+## Support
+
+Report bugs and suggestions through [GitHub Issues](https://github.com/rodion981/ha-auditor/issues).
