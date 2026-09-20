@@ -5,6 +5,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/rodion981/ha-auditor?display_name=tag&sort=semver)](https://github.com/rodion981/ha-auditor/releases)
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
 [![License](https://img.shields.io/github/license/rodion981/ha-auditor)](./LICENSE)
+[![Support via monobank](https://img.shields.io/badge/Support-monobank-black)](https://send.monobank.ua/jar/9jqG7oXrZG)
 
 [English](./README.md) | [**Українською**](./README.uk.md)
 
@@ -300,5 +301,7 @@ Python-код не потрібно.
 [MIT](LICENSE)
 
 ## Підтримка
+
+Якщо проєкт вам корисний, його розробку можна підтримати через [monobank](https://send.monobank.ua/jar/9jqG7oXrZG).
 
 Про помилки та пропозиції повідомляйте через [GitHub Issues](https://github.com/rodion981/ha-auditor/issues).
