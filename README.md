@@ -5,6 +5,7 @@ Understand HACS updates before you install them.
 [![GitHub Release](https://img.shields.io/github/v/release/rodion981/ha-auditor?display_name=tag&sort=semver)](https://github.com/rodion981/ha-auditor/releases)
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
 [![License](https://img.shields.io/github/license/rodion981/ha-auditor)](./LICENSE)
+[![Support via monobank](https://img.shields.io/badge/Support-monobank-black)](https://send.monobank.ua/jar/9jqG7oXrZG)
 
 [**English**](./README.md) | [Українською](./README.uk.md)
 
@@ -297,5 +298,7 @@ changes are needed.
 [MIT](LICENSE)
 
 ## Support
+
+If this project is useful to you, you can support its development via [monobank](https://send.monobank.ua/jar/9jqG7oXrZG).
 
 Report bugs and suggestions through [GitHub Issues](https://github.com/rodion981/ha-auditor/issues).
