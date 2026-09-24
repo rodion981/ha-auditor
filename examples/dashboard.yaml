@@ -24,21 +24,37 @@ cards:
       {% if findings %}
       ### What needs attention
       {% for item in findings[:10] %}
-      {% set marker = '🔴' if item.severity == 'critical' else '🟠' %}
-      - {{ marker }} **{{ item.component }}:** {{ item.finding_type_label or item.finding_type }}{% if item.kind == 'update' %} · `{{ item.installed_version or '?' }}` → `{{ item.latest_version or '?' }}`{% endif %}{% if item.url %} · [details]({{ item.url }}){% endif %}
-        {{ item.recommendation }}
-        Review: {{ item.review_status_label or item.review_status }} · ID: `{{ item.finding_id }}`
-        First seen: {{ item.first_seen }} · confirmations: {{ item.confirmations }}{% if item.snoozed_until %} · snoozed until: {{ item.snoozed_until }}{% endif %}
+      {% set marker = '🔴' if item.get('severity') == 'critical' else '🟠' %}
+      {% set component = item.get('component') or item.get('repository') or 'Unknown component' %}
+      {% set finding_type = item.get('finding_type_label') or item.get('finding_type') or 'Finding' %}
+      {% set kind = item.get('kind') %}
+      {% set installed_version = item.get('installed_version') or '?' %}
+      {% set latest_version = item.get('latest_version') or '?' %}
+      {% set url = item.get('url') %}
+      {% set recommendation = item.get('recommendation') %}
+      {% set review_status = item.get('review_status_label') or item.get('review_status') or 'new' %}
+      {% set finding_id = item.get('finding_id') or '?' %}
+      {% set first_seen = item.get('first_seen') or '?' %}
+      {% set confirmations = item.get('confirmations') | int(0) %}
+      {% set snoozed_until = item.get('snoozed_until') %}
+      - {{ marker }} **{{ component }}:** {{ finding_type }}{% if kind == 'update' %} · `{{ installed_version }}` → `{{ latest_version }}`{% endif %}{% if url %} · [details]({{ url }}){% endif %}
+        {% if recommendation %}{{ recommendation }}{% endif %}
+        Review: {{ review_status }} · ID: `{{ finding_id }}`
+        First seen: {{ first_seen }} · confirmations: {{ confirmations }}{% if snoozed_until %} · snoozed until: {{ snoozed_until }}{% endif %}
       {% endfor %}
       {% else %}
       No actionable findings are active.
       {% endif %}
-  - type: button
-    entity: button.ha_auditor_run_audit
-    name: Run audit now
-    icon: mdi:refresh
-    tap_action:
-      action: perform-action
-      perform_action: button.press
-      target:
-        entity_id: button.ha_auditor_run_audit
+  - type: entities
+    show_header_toggle: false
+    entities:
+      - type: button
+        entity: button.ha_auditor_run_audit
+        name: Run audit now
+        icon: mdi:refresh
+        action_name: Run
+        tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.ha_auditor_run_audit

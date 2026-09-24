@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1
+
+- Fix the example dashboard when an active finding has no optional snooze
+  deadline or other optional display fields.
+- Replace the oversized audit button card with a compact native action row.
+
 ## 1.6.0
 
 - Search up to 100 GitHub Releases and Tags per request instead of only ten

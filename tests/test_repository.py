@@ -30,7 +30,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.6.0"
+    assert manifest["version"] == "1.6.1"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -282,6 +282,21 @@ def test_repository_yaml_is_valid(relative_path: str) -> None:
     content = (ROOT / relative_path).read_text(encoding="utf-8")
 
     assert yaml.load(content, Loader=HomeAssistantYamlLoader) is not None
+
+
+def test_dashboard_handles_optional_finding_fields_and_uses_compact_action() -> None:
+    content = (ROOT / "examples" / "dashboard.yaml").read_text(encoding="utf-8")
+    dashboard = yaml.load(content, Loader=HomeAssistantYamlLoader)
+    action_card = dashboard["cards"][-1]
+    action_row = action_card["entities"][0]
+
+    assert re.search(r"item\.(?!get\()", content) is None
+    assert "item.get('snoozed_until')" in content
+    assert action_card["type"] == "entities"
+    assert action_card["show_header_toggle"] is False
+    assert action_row["type"] == "button"
+    assert action_row["entity"] == "button.ha_auditor_run_audit"
+    assert action_row["tap_action"]["perform_action"] == "button.press"
 
 
 def test_public_tree_does_not_contain_known_private_values_or_tokens() -> None:
