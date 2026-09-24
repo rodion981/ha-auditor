@@ -206,6 +206,40 @@ async def test_authenticated_release_search_stops_on_matching_page(
     assert remaining == 4997
 
 
+async def test_authenticated_release_search_continues_to_installed_boundary(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fetch the next bounded page when target is found but installed is not."""
+    entry = await _setup_entry(hass)
+    manager = hass.data[DOMAIN][entry.entry_id]
+    calls: list[str] = []
+
+    async def fake_github_get(
+        _repository: str, path: str, _etag: str | None = None
+    ) -> tuple[object, str | None, int | None, bool]:
+        calls.append(path)
+        if path == "releases?per_page=100&page=1":
+            return ([{"id": 2, "tag_name": "v2.0.0"}], "fresh-etag", 4998, True)
+        if path == "releases?per_page=100&page=2":
+            return ([{"id": 1, "tag_name": "v1.0.0"}], None, 4997, False)
+        raise AssertionError(f"Unexpected GitHub request: {path}")
+
+    monkeypatch.setattr(manager, "_github_get", fake_github_get)
+    releases, etag, remaining = await manager._fetch_releases(
+        "owner/repository", "old-etag", "2.0.0", "1.0.0"
+    )
+
+    assert releases is not None
+    assert find_release_for_version(releases, "2.0.0") is not None
+    assert find_release_for_version(releases, "1.0.0") is not None
+    assert calls == [
+        "releases?per_page=100&page=1",
+        "releases?per_page=100&page=2",
+    ]
+    assert etag == "fresh-etag"
+    assert remaining == 4997
+
+
 async def test_unauthenticated_search_uses_one_release_and_tag_page(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:

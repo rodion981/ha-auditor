@@ -58,3 +58,21 @@ live Home Assistant installation test.
 - [x] Publish the prerelease tag and GitHub Release.
 - [x] Owner explicitly approves publishing stable `v1.6.0`.
 - [x] Publish the stable tag and GitHub Release.
+
+## v1.7.0 release gate
+
+- [x] Build an exact installed-to-target path from bounded GitHub Release data.
+- [x] Keep unknown or incomplete boundaries explicit instead of estimating
+      version distance or compatibility.
+- [x] Aggregate breaking-change, security, deprecation and feature signals
+      across the confirmed path.
+- [x] Extract a minimum Home Assistant version only from explicit release-note
+      wording.
+- [x] Pass the dependency-free unit suite, Ruff and formatting checks.
+- [ ] Pass the Home Assistant runtime suite in Linux CI.
+- [ ] Validate complete, partial and tag-only paths on a live Home Assistant
+      audit with real pending HACS updates.
+- [ ] Confirm that the additional bounded pages stay within the expected GitHub
+      request budget during a full live audit.
+- [ ] Owner explicitly approves publishing a `v1.7.0` prerelease.
+- [ ] Publish the prerelease tag and GitHub Release.

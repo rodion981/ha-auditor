@@ -232,12 +232,15 @@ def test_available_update_is_assessed_on_the_first_audit() -> None:
 
 def test_cached_assessment_refreshes_after_classification_rules_change() -> None:
     current = {
+        "installed_version": "1.0.0",
         "latest_version": "2.0.0",
         "classification_version": release.CLASSIFICATION_VERSION,
     }
 
     assert release.assessment_needs_refresh(None, "2.0.0") is True
     assert release.assessment_needs_refresh(current, "2.0.0") is False
+    assert release.assessment_needs_refresh(current, "2.0.0", "1.0.0") is False
+    assert release.assessment_needs_refresh(current, "2.0.0", "1.5.0") is True
     assert release.assessment_needs_refresh(current, "2.1.0") is True
     assert (
         release.assessment_needs_refresh(
@@ -246,6 +249,114 @@ def test_cached_assessment_refreshes_after_classification_rules_change() -> None
         )
         is True
     )
+
+
+def test_complete_upgrade_path_aggregates_intermediate_release_risks() -> None:
+    repository = {
+        "repository": "owner/component",
+        "title": "Useful component",
+        "entity_id": "update.useful_component",
+        "installed_version": "1.0.0",
+        "latest_version": "3.0.0",
+        "release_url": "https://github.com/owner/component/releases/latest",
+    }
+    releases = [
+        {
+            "tag_name": "v3.0.0",
+            "name": "Version 3.0.0",
+            "body": "Maintenance release.",
+            "html_url": "https://example.test/v3.0.0",
+        },
+        {
+            "tag_name": "v2.0.0",
+            "name": "Version 2.0.0",
+            "body": (
+                "Security fix and deprecated option cleanup. "
+                "Requires Home Assistant 2026.8.0 or newer."
+            ),
+            "html_url": "https://example.test/v2.0.0",
+        },
+        {
+            "tag_name": "v1.5.0",
+            "name": "Version 1.5.0",
+            "body": "Breaking change: migration required. New feature added support.",
+            "html_url": "https://example.test/v1.5.0",
+        },
+        {
+            "tag_name": "v1.0.0",
+            "name": "Version 1.0.0",
+            "body": "Installed release.",
+            "html_url": "https://example.test/v1.0.0",
+        },
+    ]
+
+    assessment = release.assess_available_update(repository, releases, MESSAGES)
+
+    assert assessment["upgrade_path_status"] == "complete"
+    assert assessment["upgrade_path_complete"] is True
+    assert assessment["versions_behind"] == 3
+    assert assessment["intermediate_release_count"] == 2
+    assert assessment["version_path"] == [
+        "1.0.0",
+        "v1.5.0",
+        "v2.0.0",
+        "v3.0.0",
+    ]
+    assert [item["version"] for item in assessment["upgrade_releases"]] == [
+        "v1.5.0",
+        "v2.0.0",
+        "v3.0.0",
+    ]
+    assert assessment["severity"] == "critical"
+    assert assessment["upgrade_signal_counts"] == {
+        "breaking_changes": 1,
+        "security_fixes": 1,
+        "deprecations": 1,
+        "new_features": 1,
+    }
+    assert assessment["minimum_home_assistant_version"] == "2026.8.0"
+    assert assessment["minimum_home_assistant_version_source"].endswith("v2.0.0")
+    assert assessment["compatibility_status"] == "requirement_found"
+
+
+def test_upgrade_path_is_partial_when_installed_release_is_not_found() -> None:
+    repository = {
+        "repository": "owner/component",
+        "title": "Useful component",
+        "installed_version": "1.0.0",
+        "latest_version": "2.0.0",
+    }
+    releases = [
+        {
+            "tag_name": "v2.0.0",
+            "name": "Version 2.0.0",
+            "body": "Security fix.",
+        }
+    ]
+
+    assessment = release.assess_available_update(repository, releases, MESSAGES)
+
+    assert assessment["upgrade_path_status"] == "partial"
+    assert assessment["upgrade_path_complete"] is False
+    assert assessment["versions_behind"] is None
+    assert assessment["intermediate_release_count"] is None
+    assert assessment["compatibility_status"] == "unknown"
+
+
+def test_release_signals_ignore_negated_breaking_change() -> None:
+    assert release.release_signals("No breaking changes. New feature added.") == [
+        "new_features"
+    ]
+
+
+def test_minimum_home_assistant_version_requires_explicit_wording() -> None:
+    assert (
+        release.extract_minimum_home_assistant_version(
+            "Requires Home Assistant 2026.7 or newer."
+        )
+        == "2026.7"
+    )
+    assert release.extract_minimum_home_assistant_version("Tested on 2026.9") == ""
 
 
 def test_available_update_reports_missing_matching_release() -> None:

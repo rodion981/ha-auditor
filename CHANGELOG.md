@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Build a confirmed release path from the installed HACS version through every
+  matching intermediate GitHub Release to the target version.
+- Count versions behind and intermediate releases without comparing arbitrary
+  version strings or estimating a path when an endpoint is missing.
+- Aggregate breaking-change, security, deprecation and feature signals across
+  the complete confirmed path.
+- Report an explicit minimum Home Assistant version only when release notes
+  state one, otherwise keep compatibility unknown.
+- Continue bounded authenticated pagination until both release boundaries are
+  found, while preserving the existing three-page maximum.
+
 ## 1.6.1
 
 - Fix the example dashboard when an active finding has no optional snooze

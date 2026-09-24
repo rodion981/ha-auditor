@@ -542,7 +542,9 @@ class ComponentsAuditor:
                     etag = None
                 if repository["update_available"] and (
                     assessment_needs_refresh(
-                        previous_assessment, repository["latest_version"]
+                        previous_assessment,
+                        repository["latest_version"],
+                        repository["installed_version"],
                     )
                 ):
                     etag = None
@@ -550,6 +552,9 @@ class ComponentsAuditor:
                     repository["repository"],
                     etag,
                     repository["latest_version"]
+                    if repository["update_available"]
+                    else "",
+                    repository["installed_version"]
                     if repository["update_available"]
                     else "",
                 )
@@ -671,10 +676,20 @@ class ComponentsAuditor:
         updates_available = sum(1 for item in repositories if item["update_available"])
         available_updates = self._get_available_updates(repositories, component_state)
         available_update_counts = {key: 0 for key in (*SEVERITY_ORDER, "unknown")}
+        upgrade_path_counts = {
+            "complete": 0,
+            "partial": 0,
+            "unavailable": 0,
+            "not_checked": 0,
+        }
         for update in available_updates:
             severity = update.get("severity", "unknown")
             available_update_counts[severity] = (
                 available_update_counts.get(severity, 0) + 1
+            )
+            path_status = str(update.get("upgrade_path_status") or "unavailable")
+            upgrade_path_counts[path_status] = (
+                upgrade_path_counts.get(path_status, 0) + 1
             )
         error_counts: dict[str, int] = {}
         for error in error_details:
@@ -713,6 +728,7 @@ class ComponentsAuditor:
             "updates_available": updates_available,
             "available_updates": available_updates,
             "available_update_counts": available_update_counts,
+            "upgrade_path_counts": upgrade_path_counts,
             "up_to_date_components": max(total - updates_available, 0),
             "stale_components": len(stale_components),
             "stale_component_details": stale_components,
@@ -783,6 +799,20 @@ class ComponentsAuditor:
                     "summary": "",
                     "url": repository["release_url"],
                     "published_at": "",
+                    "upgrade_path_status": "not_checked",
+                    "upgrade_path_complete": False,
+                    "versions_behind": None,
+                    "intermediate_release_count": None,
+                    "version_path": [
+                        repository["installed_version"],
+                        repository["latest_version"],
+                    ],
+                    "upgrade_releases": [],
+                    "upgrade_path_truncated": False,
+                    "upgrade_signal_counts": {},
+                    "minimum_home_assistant_version": "",
+                    "minimum_home_assistant_version_source": "",
+                    "compatibility_status": "unknown",
                 }
             )
         updates.sort(
@@ -906,7 +936,11 @@ class ComponentsAuditor:
         return payload, remaining
 
     async def _fetch_releases(
-        self, repository: str, etag: str | None, latest_version: str
+        self,
+        repository: str,
+        etag: str | None,
+        latest_version: str,
+        installed_version: str = "",
     ) -> tuple[list[dict[str, Any]] | None, str | None, int | None]:
         payload, response_etag, remaining, has_next = await self._github_get(
             repository, f"releases?per_page={GITHUB_PAGE_SIZE}&page=1", etag
@@ -924,7 +958,14 @@ class ComponentsAuditor:
             page = 1
             while (
                 latest_version
-                and find_release_for_version(releases, latest_version) is None
+                and (
+                    find_release_for_version(releases, latest_version) is None
+                    or (
+                        installed_version
+                        and find_release_for_version(releases, installed_version)
+                        is None
+                    )
+                )
                 and has_next
                 and page < max_pages
             ):
@@ -1433,6 +1474,7 @@ class ComponentsAuditor:
                 for item in self.data.get("available_updates", [])[:10]
             ],
             "available_update_counts": self.data.get("available_update_counts", {}),
+            "upgrade_path_counts": self.data.get("upgrade_path_counts", {}),
             "attention_required": self.attention_required,
             "audit_problem": self.audit_problem,
             "active_finding_count": self.data.get("active_finding_count", 0),

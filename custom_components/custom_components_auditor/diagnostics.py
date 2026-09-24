@@ -69,6 +69,7 @@ async def async_get_config_entry_diagnostics(
             "available_update_counts": _safe_mapping(
                 runtime.get("available_update_counts")
             ),
+            "upgrade_path_counts": _safe_mapping(runtime.get("upgrade_path_counts")),
             "repository_health_counts": _safe_mapping(
                 runtime.get("repository_health_counts")
             ),

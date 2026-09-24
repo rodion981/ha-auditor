@@ -164,8 +164,9 @@ The integration creates five native Home Assistant entities:
 | `deferred_components` | Repositories deferred to later runs because the current unauthenticated batch is smaller than the discovered inventory. |
 | `cycle_complete` | `true` when the latest run checked the complete discovered inventory successfully. |
 | `updates_available` | Number of updates currently offered by HACS. |
-| `available_updates` | Installed/latest versions, attention level, reason, summary, release URL and `found` / `not_found` / `not_checked` release-note status for current updates. |
+| `available_updates` | Installed/latest versions, attention level, release status, confirmed version path, skipped-release counts, per-release summaries, aggregated risk signals and an explicitly stated minimum Home Assistant version when found. |
 | `available_update_counts` | Current available updates grouped as `critical`, `important`, `feature`, `minor` or `unknown`. |
+| `upgrade_path_counts` | Current updates grouped by `complete`, `partial`, `unavailable` or `not_checked` path status. |
 | `repository_health_counts` | Number of archived repositories and repositories with no push for at least 730 days. |
 | `repository_health_details` | Repository status, last push date, inactive days and GitHub URL. |
 | `excluded_repositories` | Repositories skipped through the integration options. |
@@ -211,6 +212,20 @@ Available HACS updates and newly published GitHub releases are intentionally
 reported separately. An integration can have an available update without that
 release being new to the auditor.
 
+For an available update, HA Auditor searches for both the installed and target
+GitHub Releases. When both exact boundaries are present, `upgrade_path_status`
+is `complete`, `version_path` shows the confirmed sequence, and
+`intermediate_release_count` reports releases between the installed and target
+versions. Risk classification then covers every confirmed release in that path,
+not only the target release. Breaking-change, security, deprecation and feature
+signals are counted separately in `upgrade_signal_counts`.
+
+If the installed boundary is outside the bounded lookup or has no matching
+GitHub Release, the path is `partial`; counts remain unknown instead of being
+estimated. `minimum_home_assistant_version` is populated only when release notes
+state a requirement explicitly. Otherwise `compatibility_status` stays
+`unknown`.
+
 If a repository has no GitHub Releases, HA Auditor falls back to its latest
 GitHub Tags. A matched tag is reported as the source, without inventing release
 notes or a risk classification. Repository metadata is also checked for the
@@ -241,9 +256,10 @@ remove the rejected token and continue with unauthenticated batches.
 - Tag-only repositories can be tracked, but a tag does not provide release notes
   or enough evidence for a risk classification.
 - Without a token, HA Auditor searches up to 100 GitHub Releases and 100 Tags
-  for the exact HACS version. With a token, it follows at most three pages of
-  each source and stops as soon as the version is found. A remaining mismatch
-  is shown as `unknown` instead of guessing.
+  for the exact HACS versions. With a token, it follows at most three pages of
+  each source and stops when both the target and installed release boundaries
+  are found. A missing boundary produces a `partial` or `unavailable` path
+  instead of an estimated count.
 - GitHub's unauthenticated API limit is lower, so larger installations should
   use a read-only token or process repositories in batches.
 

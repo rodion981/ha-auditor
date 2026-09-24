@@ -13,8 +13,35 @@ MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
 UPDATE_SUFFIX_RE = re.compile(r"\s+update\s*$", re.IGNORECASE)
-CLASSIFICATION_VERSION = 4
+CLASSIFICATION_VERSION = 5
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
+MINIMUM_HOME_ASSISTANT_PATTERNS = (
+    re.compile(
+        r"\b(?:minimum|required|requires?)\s+(?:supported\s+)?"
+        r"(?:home assistant|ha)(?:\s+version)?\s*"
+        r"(?:is|of|:|>=|\u2265)?\s*(\d{4}\.\d+(?:\.\d+)?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:home assistant|ha)\s+(\d{4}\.\d+(?:\.\d+)?)\s*"
+        r"(?:or newer|or later|\+|minimum|required)\b",
+        re.IGNORECASE,
+    ),
+)
+UPGRADE_PATH_DISPLAY_LIMIT = 30
+UPGRADE_SIGNAL_KEYS = (
+    "breaking_changes",
+    "security_fixes",
+    "deprecations",
+    "new_features",
+)
+_SEVERITY_ORDER = {
+    "unknown": -1,
+    "minor": 0,
+    "feature": 1,
+    "important": 2,
+    "critical": 3,
+}
 RESOLVED_DEPRECATION_WARNING_RE = re.compile(
     r"\b(?:fix(?:ed|es|ing)?|resolv(?:e|ed|es|ing)|silenc(?:e|ed|es|ing))\b"
     r"[^\n.;]{0,100}\bdeprecat(?:ed|ion)?\s+warnings?\b"
@@ -82,15 +109,7 @@ def classify_release(text: str) -> str:
 
 def classify_release_details(text: str) -> tuple[str, str]:
     """Classify release notes and return the term that caused the decision."""
-    lowered = text.casefold()
-    lowered = RESOLVED_DEPRECATION_WARNING_RE.sub("", lowered)
-    for harmless_phrase in (
-        "no breaking changes",
-        "without breaking changes",
-        "not a breaking change",
-        "non-breaking change",
-    ):
-        lowered = lowered.replace(harmless_phrase, "")
+    lowered = _normalized_classification_text(text)
     for severity, terms in (
         ("critical", CRITICAL_TERMS),
         ("important", IMPORTANT_TERMS),
@@ -100,6 +119,65 @@ def classify_release_details(text: str) -> tuple[str, str]:
             if term in lowered:
                 return severity, term
     return "minor", ""
+
+
+def _normalized_classification_text(text: str) -> str:
+    """Normalize release notes before deterministic keyword inspection."""
+    lowered = text.casefold()
+    lowered = RESOLVED_DEPRECATION_WARNING_RE.sub("", lowered)
+    for harmless_phrase in (
+        "no breaking changes",
+        "without breaking changes",
+        "not a breaking change",
+        "non-breaking change",
+    ):
+        lowered = lowered.replace(harmless_phrase, "")
+    return lowered
+
+
+def release_signals(text: str) -> list[str]:
+    """Return evidence-backed signal categories present in release notes."""
+    lowered = _normalized_classification_text(text)
+    signals: list[str] = []
+    if any(term in lowered for term in CRITICAL_TERMS):
+        signals.append("breaking_changes")
+    if any(
+        term in lowered
+        for term in (
+            "security",
+            "vulnerability",
+            "cve-",
+            "\u0431\u0435\u0437\u043f\u0435\u043a",
+            "\u0432\u0440\u0430\u0437\u043b\u0438\u0432",
+        )
+    ):
+        signals.append("security_fixes")
+    if any(
+        term in lowered
+        for term in (
+            "deprecat",
+            "obsolete option",
+            "\u0437\u0430\u0441\u0442\u0430\u0440",
+        )
+    ):
+        signals.append("deprecations")
+    if any(term in lowered for term in FEATURE_TERMS):
+        signals.append("new_features")
+    return signals
+
+
+def extract_minimum_home_assistant_version(text: str) -> str:
+    """Extract an explicitly stated minimum Home Assistant version."""
+    versions = {
+        match.group(1)
+        for pattern in MINIMUM_HOME_ASSISTANT_PATTERNS
+        for match in pattern.finditer(text)
+    }
+    if not versions:
+        return ""
+    return max(
+        versions, key=lambda value: tuple(int(part) for part in value.split("."))
+    )
 
 
 def localize(messages: Mapping[str, str], key: str, **placeholders: Any) -> str:
@@ -209,11 +287,17 @@ def parse_rate_limit_reset(value: Any) -> datetime | None:
         return None
 
 
-def assessment_needs_refresh(assessment: Any, latest_version: Any) -> bool:
+def assessment_needs_refresh(
+    assessment: Any, latest_version: Any, installed_version: Any | None = None
+) -> bool:
     """Return whether a cached available-update assessment must be rebuilt."""
     return not isinstance(assessment, Mapping) or (
         assessment.get("latest_version") != str(latest_version or "")
         or assessment.get("classification_version") != CLASSIFICATION_VERSION
+        or (
+            installed_version is not None
+            and assessment.get("installed_version") != str(installed_version or "")
+        )
     )
 
 
@@ -284,6 +368,109 @@ def assess_repository_health(
     }
 
 
+def build_upgrade_path(
+    releases: list[dict[str, Any]], installed_version: Any, latest_version: Any
+) -> dict[str, Any]:
+    """Build a bounded, evidence-backed release path between exact endpoints."""
+    installed = str(installed_version or "")
+    latest = str(latest_version or "")
+    base: dict[str, Any] = {
+        "upgrade_path_status": "unavailable",
+        "upgrade_path_complete": False,
+        "versions_behind": None,
+        "intermediate_release_count": None,
+        "version_path": [value for value in (installed, latest) if value],
+        "upgrade_releases": [],
+        "upgrade_path_truncated": False,
+        "upgrade_signal_counts": {key: 0 for key in UPGRADE_SIGNAL_KEYS},
+        "upgrade_severity": "unknown",
+        "upgrade_matched_term": "",
+        "minimum_home_assistant_version": "",
+        "minimum_home_assistant_version_source": "",
+        "compatibility_status": "unknown",
+    }
+    target_release = find_release_for_version(releases, latest)
+    if target_release is None or target_release.get("source") == "tag":
+        return base
+
+    installed_release = find_release_for_version(releases, installed)
+    if installed_release is None:
+        return {**base, "upgrade_path_status": "partial"}
+
+    target_index = releases.index(target_release)
+    installed_index = releases.index(installed_release)
+    if target_index >= installed_index:
+        return base
+
+    path = list(reversed(releases[target_index:installed_index]))
+    details: list[dict[str, Any]] = []
+    signal_counts = {key: 0 for key in UPGRADE_SIGNAL_KEYS}
+    upgrade_severity = "minor"
+    upgrade_matched_term = ""
+    minimum_ha_version = ""
+    minimum_ha_source = ""
+
+    for release in path:
+        version = str(release.get("tag_name") or "")
+        title = str(release.get("name") or version)
+        body = str(release.get("body") or "")
+        text = f"{title}\n{body}"
+        severity, matched_term = classify_release_details(text)
+        signals = release_signals(text)
+        for signal in signals:
+            signal_counts[signal] += 1
+        if _SEVERITY_ORDER[severity] > _SEVERITY_ORDER[upgrade_severity]:
+            upgrade_severity = severity
+            upgrade_matched_term = matched_term
+
+        explicit_minimum = extract_minimum_home_assistant_version(text)
+        if explicit_minimum and (
+            not minimum_ha_version
+            or tuple(int(part) for part in explicit_minimum.split("."))
+            > tuple(int(part) for part in minimum_ha_version.split("."))
+        ):
+            minimum_ha_version = explicit_minimum
+            minimum_ha_source = str(release.get("html_url") or "")
+
+        details.append(
+            {
+                "version": version,
+                "title": title,
+                "severity": severity,
+                "signals": signals,
+                "summary": summarize_release(body),
+                "url": str(release.get("html_url") or ""),
+                "published_at": str(
+                    release.get("published_at") or release.get("created_at") or ""
+                ),
+            }
+        )
+
+    display_details = details
+    if len(details) > UPGRADE_PATH_DISPLAY_LIMIT:
+        display_details = [
+            *details[: UPGRADE_PATH_DISPLAY_LIMIT - 1],
+            details[-1],
+        ]
+    compatibility_status = "requirement_found" if minimum_ha_version else "unknown"
+    return {
+        **base,
+        "upgrade_path_status": "complete",
+        "upgrade_path_complete": True,
+        "versions_behind": len(path),
+        "intermediate_release_count": max(len(path) - 1, 0),
+        "version_path": [installed] + [item["version"] for item in display_details],
+        "upgrade_releases": display_details,
+        "upgrade_path_truncated": len(details) > len(display_details),
+        "upgrade_signal_counts": signal_counts,
+        "upgrade_severity": upgrade_severity,
+        "upgrade_matched_term": upgrade_matched_term,
+        "minimum_home_assistant_version": minimum_ha_version,
+        "minimum_home_assistant_version_source": minimum_ha_source,
+        "compatibility_status": compatibility_status,
+    }
+
+
 def assess_available_update(
     repository: dict[str, Any],
     releases: list[dict[str, Any]],
@@ -299,10 +486,14 @@ def assess_available_update(
         "latest_version": latest_version,
         "classification_version": CLASSIFICATION_VERSION,
     }
+    upgrade_path = build_upgrade_path(
+        releases, base["installed_version"], base["latest_version"]
+    )
     release = find_release_for_version(releases, latest_version)
     if release is None:
         return {
             **base,
+            **upgrade_path,
             "release_status": "not_found",
             "release_status_label": localize(messages, "release_status_not_found"),
             "severity": "unknown",
@@ -323,11 +514,15 @@ def assess_available_update(
         status_label = localize(messages, "release_status_tag_found")
     else:
         severity, matched_term = classify_release_details(f"{title}\n{body}")
+        if upgrade_path["upgrade_path_complete"]:
+            severity = str(upgrade_path["upgrade_severity"])
+            matched_term = str(upgrade_path["upgrade_matched_term"])
         reason = classification_reason(severity, matched_term, messages)
         summary = summarize_release(body)
         status_label = localize(messages, "release_status_found")
     return {
         **base,
+        **upgrade_path,
         "release_status": "found",
         "release_status_label": status_label,
         "release_source": release_source,
