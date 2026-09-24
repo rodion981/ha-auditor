@@ -57,4 +57,4 @@ live Home Assistant installation test.
 - [x] Owner explicitly approves publishing `v1.6.0-beta.1`.
 - [x] Publish the prerelease tag and GitHub Release.
 - [x] Owner explicitly approves publishing stable `v1.6.0`.
-- [ ] Publish the stable tag and GitHub Release.
+- [x] Publish the stable tag and GitHub Release.
