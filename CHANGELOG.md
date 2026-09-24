@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.0-beta.1
+## 1.6.0
 
 - Search up to 100 GitHub Releases and Tags per request instead of only ten
   Releases.
@@ -10,6 +10,9 @@
   no Release for the version currently offered by HACS.
 - Keep unauthenticated audits bounded to one Releases page and one Tags page
   per repository so the configured API budget remains predictable.
+- Validate the stable release on a live 110-component Home Assistant audit with
+  14 available updates, no unknown release matches, no errors and no duplicate
+  release events on the repeated run.
 
 ## 1.5.1
 

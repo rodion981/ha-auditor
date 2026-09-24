@@ -44,12 +44,17 @@ The live Home Assistant test and GitHub release remain separate gates. A
 green local suite is not evidence that the integration has passed hassfest or a
 live Home Assistant installation test.
 
-## v1.6.0 beta gate
+## v1.6.0 release gate
 
 - [x] Add target-aware Releases and Tags lookup with bounded pagination.
 - [x] Pass the local compile, Ruff and 103-test runtime suite.
 - [x] Pass hassfest and the complete remote test workflow.
+- [x] Validate a repeated full audit on a live Home Assistant instance: 110 of
+      110 components checked, 14 available updates, zero unknown matches, no
+      errors and no duplicate release events.
 - [ ] Validate an update whose matching Release or Tag is outside the first ten
       GitHub results on a live Home Assistant instance.
 - [x] Owner explicitly approves publishing `v1.6.0-beta.1`.
 - [x] Publish the prerelease tag and GitHub Release.
+- [x] Owner explicitly approves publishing stable `v1.6.0`.
+- [ ] Publish the stable tag and GitHub Release.
