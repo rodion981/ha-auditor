@@ -8,22 +8,20 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import ComponentsAuditor
-from .const import DOMAIN
+from . import AuditorConfigEntry, ComponentsAuditor
 from .entity import AuditorEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: AuditorConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up actionable-attention and audit-health indicators."""
-    manager: ComponentsAuditor = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     async_add_entities(
         [
             AuditorAttentionBinarySensor(manager, entry.entry_id),

@@ -1,0 +1,22 @@
+alias: HA Auditor - сповіщення про нові критичні знахідки
+description: Створює одне постійне сповіщення, коли активується критична знахідка.
+triggers:
+  - trigger: state
+    entity_id: sensor.ha_auditor_active_findings
+conditions:
+  - condition: template
+    value_template: >-
+      {% set changes = state_attr('sensor.ha_auditor_active_findings', 'finding_changes') or {} %}
+      {{ (changes.get('activated') or []) | selectattr('severity', 'eq', 'critical') | list | count > 0 }}
+actions:
+  - action: persistent_notification.create
+    data:
+      title: HA Auditor знайшов критичне оновлення
+      message: >-
+        {% set changes = state_attr('sensor.ha_auditor_active_findings', 'finding_changes') or {} %}
+        {% set critical = (changes.get('activated') or []) | selectattr('severity', 'eq', 'critical') | list %}
+        {% for item in critical %}
+        {{ item.get('component') or item.get('repository') }}: {{ item.get('finding_type_label') or item.get('finding_type') }}{% if item.get('url') %} - {{ item.get('url') }}{% endif %}
+        {% endfor %}
+mode: queued
+max: 3

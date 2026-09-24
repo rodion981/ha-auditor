@@ -50,4 +50,8 @@ jobs:
       - name: Install Home Assistant runtime test tools
         run: python -m pip install -r requirements_runtime_test.txt
       - name: Test Home Assistant runtime integration
-        run: python -m pytest tests/test_runtime.py
+        run: >-
+          python -m pytest
+          --cov=custom_components/custom_components_auditor
+          --cov-report=term-missing:skip-covered
+          --cov-fail-under=78

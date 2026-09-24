@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from . import AuditorConfigEntry
 from .config import normalize_settings
 from .const import (
     CONF_DAILY_HOUR,
@@ -16,7 +16,6 @@ from .const import (
     CONF_MAX_REQUESTS,
     CONF_NOTIFY_SERVICE,
     CONF_WEEKLY_WEEKDAY,
-    DOMAIN,
 )
 
 _RUNTIME_KEYS = (
@@ -46,12 +45,11 @@ def _safe_mapping(value: Any) -> dict[str, Any]:
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
+    hass: HomeAssistant, entry: AuditorConfigEntry
 ) -> dict[str, Any]:
     """Return privacy-preserving diagnostics for a config entry."""
     settings = normalize_settings(entry.data, entry.options)
-    managers = hass.data.get(DOMAIN, {})
-    manager = managers.get(entry.entry_id) if isinstance(managers, Mapping) else None
+    manager = getattr(entry, "runtime_data", None)
     runtime = manager.data if manager is not None else {}
 
     return {

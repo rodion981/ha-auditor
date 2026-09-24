@@ -137,6 +137,8 @@ def test_config_flow_has_bilingual_translations() -> None:
             "sensor",
             "binary_sensor",
             "button",
+            "todo",
+            "select",
         }
         assert set(translation["common"]) == set(strings["common"])
 
@@ -232,12 +234,14 @@ def test_service_icon_is_present() -> None:
 
 
 def test_native_entity_platforms_are_packaged() -> None:
-    for platform in ("sensor", "binary_sensor", "button"):
+    for platform in ("sensor", "binary_sensor", "button", "select", "todo"):
         assert (INTEGRATION / f"{platform}.py").is_file()
 
     integration_source = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
     assert "async_forward_entry_setups(entry, PLATFORMS)" in integration_source
     assert "hass.states.async_set" not in integration_source
+    assert "hass.data" not in integration_source
+    assert "entry.runtime_data = manager" in integration_source
     assert "update_findings" in integration_source
     assert "AuditorActiveFindingsSensor" in (INTEGRATION / "sensor.py").read_text(
         encoding="utf-8"
@@ -276,6 +280,9 @@ def test_integration_brand_icon_is_packaged_locally() -> None:
     [
         ".github/workflows/validate.yml",
         "examples/dashboard.yaml",
+        "examples/dashboard.uk.yaml",
+        "examples/automation-critical.yaml",
+        "examples/automation-critical.uk.yaml",
     ],
 )
 def test_repository_yaml_is_valid(relative_path: str) -> None:
@@ -288,15 +295,26 @@ def test_dashboard_handles_optional_finding_fields_and_uses_compact_action() -> 
     content = (ROOT / "examples" / "dashboard.yaml").read_text(encoding="utf-8")
     dashboard = yaml.load(content, Loader=HomeAssistantYamlLoader)
     action_card = dashboard["cards"][-1]
-    action_row = action_card["entities"][0]
+    filter_row = action_card["entities"][0]
+    action_row = action_card["entities"][1]
 
     assert re.search(r"item\.(?!get\()", content) is None
     assert "item.get('snoozed_until')" in content
     assert action_card["type"] == "entities"
     assert action_card["show_header_toggle"] is False
+    assert filter_row["entity"] == "select.ha_auditor_finding_filter"
     assert action_row["type"] == "button"
     assert action_row["entity"] == "button.ha_auditor_run_audit"
     assert action_row["tap_action"]["perform_action"] == "button.press"
+    todo_card = dashboard["cards"][-2]
+    assert todo_card == {
+        "type": "todo-list",
+        "entity": "todo.ha_auditor_findings",
+        "title": "Review findings",
+        "hide_create": True,
+        "hide_completed": False,
+        "item_tap_action": "toggle",
+    }
 
 
 def test_public_tree_does_not_contain_known_private_values_or_tokens() -> None:

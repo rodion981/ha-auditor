@@ -5,22 +5,21 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import ComponentsAuditor
-from .const import DOMAIN, SENSOR_ENTITY_ID
+from . import AuditorConfigEntry, ComponentsAuditor
+from .const import SENSOR_ENTITY_ID
 from .entity import AuditorEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: AuditorConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the audit result and persistent finding sensors."""
-    manager: ComponentsAuditor = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     async_add_entities(
         [
             AuditorResultSensor(manager, entry.entry_id),

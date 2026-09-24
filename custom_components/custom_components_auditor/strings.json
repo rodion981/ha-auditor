@@ -171,6 +171,22 @@
       "run_audit": {
         "name": "Run audit now"
       }
+    },
+    "todo": {
+      "findings": {
+        "name": "Findings"
+      }
+    },
+    "select": {
+      "finding_filter": {
+        "name": "Finding filter",
+        "state": {
+          "all": "All findings",
+          "updates": "Updates",
+          "archived": "Archived repositories",
+          "abandoned": "Inactive repositories"
+        }
+      }
     }
   },
   "common": {

@@ -45,9 +45,17 @@ cards:
       {% else %}
       No actionable findings are active.
       {% endif %}
+  - type: todo-list
+    entity: todo.ha_auditor_findings
+    title: Review findings
+    hide_create: true
+    hide_completed: false
+    item_tap_action: toggle
   - type: entities
     show_header_toggle: false
     entities:
+      - entity: select.ha_auditor_finding_filter
+        name: Finding type
       - type: button
         entity: button.ha_auditor_run_audit
         name: Run audit now

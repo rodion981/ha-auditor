@@ -1,0 +1,22 @@
+alias: HA Auditor - notify about new critical findings
+description: Create one persistent notification when a critical finding activates.
+triggers:
+  - trigger: state
+    entity_id: sensor.ha_auditor_active_findings
+conditions:
+  - condition: template
+    value_template: >-
+      {% set changes = state_attr('sensor.ha_auditor_active_findings', 'finding_changes') or {} %}
+      {{ (changes.get('activated') or []) | selectattr('severity', 'eq', 'critical') | list | count > 0 }}
+actions:
+  - action: persistent_notification.create
+    data:
+      title: HA Auditor found a critical update
+      message: >-
+        {% set changes = state_attr('sensor.ha_auditor_active_findings', 'finding_changes') or {} %}
+        {% set critical = (changes.get('activated') or []) | selectattr('severity', 'eq', 'critical') | list %}
+        {% for item in critical %}
+        {{ item.get('component') or item.get('repository') }}: {{ item.get('finding_type_label') or item.get('finding_type') }}{% if item.get('url') %} - {{ item.get('url') }}{% endif %}
+        {% endfor %}
+mode: queued
+max: 3

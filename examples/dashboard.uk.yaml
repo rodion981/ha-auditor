@@ -1,0 +1,68 @@
+type: vertical-stack
+cards:
+  - type: markdown
+    content: |
+      {% set entity = 'sensor.custom_components_auditor' %}
+      {% set findings_entity = 'sensor.ha_auditor_active_findings' %}
+      {% set status = state_attr(entity, 'status') %}
+      {% set checked = state_attr(entity, 'checked_this_run') | int(0) %}
+      {% set targeted = state_attr(entity, 'targeted_this_run') | int(0) %}
+      {% set total = state_attr(entity, 'total_components') | int(0) %}
+      {% set deferred = state_attr(entity, 'deferred_components') | int(0) %}
+      {% set cycle_complete = state_attr(entity, 'cycle_complete') %}
+      {% set findings = state_attr(findings_entity, 'active_findings') or [] %}
+      {% set finding_counts = state_attr(findings_entity, 'finding_counts') or {} %}
+      {% set pending = state_attr(findings_entity, 'findings_pending_confirmation') | int(0) %}
+      {% set excluded = state_attr(entity, 'excluded_components') | int(0) %}
+      ## Аудит релізів HACS
+      Стан аудиту: **{{ status or 'ще не запускався' }}** · проблема: **{{ states('binary_sensor.ha_auditor_audit_problem') }}**<br>
+      Перевірено: **{{ checked }}/{{ targeted }}** вибраних, **{{ total }}** загалом<br>
+      {% if cycle_complete %}Охоплення: **повне**{% else %}Відкладено: **{{ deferred }}**{% endif %}<br>
+      Виключено: **{{ excluded }}**<br>
+      Активні знахідки: **{{ states(findings_entity) }}** · нові: **{{ finding_counts.get('new', 0) }}** · потребують уваги: **{{ states('binary_sensor.ha_auditor_attention_required') }}**{% if pending %} · очікують підтвердження: **{{ pending }}**{% endif %}
+
+      {% if findings %}
+      ### Що потребує уваги
+      {% for item in findings[:10] %}
+      {% set marker = '🔴' if item.get('severity') == 'critical' else '🟠' %}
+      {% set component = item.get('component') or item.get('repository') or 'Невідомий компонент' %}
+      {% set finding_type = item.get('finding_type_label') or item.get('finding_type') or 'Знахідка' %}
+      {% set kind = item.get('kind') %}
+      {% set installed_version = item.get('installed_version') or '?' %}
+      {% set latest_version = item.get('latest_version') or '?' %}
+      {% set url = item.get('url') %}
+      {% set recommendation = item.get('recommendation') %}
+      {% set review_status = item.get('review_status_label') or item.get('review_status') or 'нова' %}
+      {% set finding_id = item.get('finding_id') or '?' %}
+      {% set first_seen = item.get('first_seen') or '?' %}
+      {% set confirmations = item.get('confirmations') | int(0) %}
+      {% set snoozed_until = item.get('snoozed_until') %}
+      - {{ marker }} **{{ component }}:** {{ finding_type }}{% if kind == 'update' %} · `{{ installed_version }}` → `{{ latest_version }}`{% endif %}{% if url %} · [деталі]({{ url }}){% endif %}
+        {% if recommendation %}{{ recommendation }}{% endif %}
+        Перегляд: {{ review_status }} · ID: `{{ finding_id }}`
+        Уперше знайдено: {{ first_seen }} · підтверджень: {{ confirmations }}{% if snoozed_until %} · відкладено до: {{ snoozed_until }}{% endif %}
+      {% endfor %}
+      {% else %}
+      Активних знахідок немає.
+      {% endif %}
+  - type: todo-list
+    entity: todo.ha_auditor_findings
+    title: Перегляд знахідок
+    hide_create: true
+    hide_completed: false
+    item_tap_action: toggle
+  - type: entities
+    show_header_toggle: false
+    entities:
+      - entity: select.ha_auditor_finding_filter
+        name: Тип знахідок
+      - type: button
+        entity: button.ha_auditor_run_audit
+        name: Запустити аудит зараз
+        icon: mdi:refresh
+        action_name: Запустити
+        tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.ha_auditor_run_audit

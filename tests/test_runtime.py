@@ -12,9 +12,13 @@ pytest.importorskip("homeassistant")
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.custom_components_auditor import repairs
 from custom_components.custom_components_auditor.const import (
+    CONF_CLEAR_GITHUB_TOKEN,
     DOMAIN,
     SERVICE_ACKNOWLEDGE_FINDING,
     SERVICE_IGNORE_FINDING,
@@ -31,6 +35,11 @@ from custom_components.custom_components_auditor.findings import (
     update_findings,
 )
 from custom_components.custom_components_auditor.release import find_release_for_version
+from custom_components.custom_components_auditor.todo import (
+    AuditorFindingsTodo,
+    TodoItem,
+    TodoItemStatus,
+)
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
@@ -74,6 +83,8 @@ async def test_runtime_setup_registers_entities_and_actions(
         "binary_sensor.ha_auditor_attention_required": "off",
         "binary_sensor.ha_auditor_audit_problem": "off",
         "button.ha_auditor_run_audit": "unknown",
+        "select.ha_auditor_finding_filter": "all",
+        "todo.ha_auditor_findings": "0",
     }
     for entity_id, expected_state in expected_states.items():
         state = hass.states.get(entity_id)
@@ -95,12 +106,119 @@ async def test_runtime_setup_registers_entities_and_actions(
     assert entry.state is ConfigEntryState.NOT_LOADED
 
 
+async def test_config_and_options_flows_use_ui_only(hass: HomeAssistant) -> None:
+    """Cover initial setup, duplicate prevention and secret-safe options."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "github_token": "flow-secret",
+            "notify_service": "",
+            "excluded_repositories": "owner/one\nowner/two",
+            "daily_hour": 8,
+            "weekly_weekday": "5",
+            "max_requests_per_run": 30,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    entry = result["result"]
+    assert entry.data["github_token"] == "flow-secret"
+    assert entry.data["excluded_repositories"] == ["owner/one", "owner/two"]
+
+    duplicate = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    assert duplicate["type"] is FlowResultType.ABORT
+    assert duplicate["reason"] == "single_instance_allowed"
+
+    options = await hass.config_entries.options.async_init(entry.entry_id)
+    assert options["type"] is FlowResultType.FORM
+    options = await hass.config_entries.options.async_configure(
+        options["flow_id"],
+        {
+            "github_token": "",
+            CONF_CLEAR_GITHUB_TOKEN: True,
+            "notify_service": "",
+            "excluded_repositories": "owner/two",
+            "daily_hour": 10,
+            "weekly_weekday": "6",
+            "max_requests_per_run": 45,
+        },
+    )
+    assert options["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["github_token"] == ""
+    assert entry.options["daily_hour"] == 10
+
+
+async def test_repair_flow_replaces_or_removes_rejected_token(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise the fixable Repair without exposing the submitted token."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    validated: list[str] = []
+
+    async def fake_validate(_hass: HomeAssistant, token: str) -> None:
+        validated.append(token)
+
+    monkeypatch.setattr(repairs, "_async_validate_token", fake_validate)
+    flow = repairs.GitHubTokenRepairFlow()
+    flow.hass = hass
+    flow.data = {"entry_id": entry.entry_id}
+
+    result = await flow.async_step_init()
+    assert result["type"] is FlowResultType.FORM
+    result = await flow.async_step_init(
+        {"github_token": "replacement-secret", CONF_CLEAR_GITHUB_TOKEN: False}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert validated == ["replacement-secret"]
+    assert entry.options["github_token"] == "replacement-secret"
+
+    remove_flow = repairs.GitHubTokenRepairFlow()
+    remove_flow.hass = hass
+    remove_flow.data = {"entry_id": entry.entry_id}
+    result = await remove_flow.async_step_init(
+        {"github_token": "", CONF_CLEAR_GITHUB_TOKEN: True}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["github_token"] == ""
+
+
+async def test_repair_flow_translates_invalid_token(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Return a localized form error when GitHub rejects a replacement."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    async def reject_token(_hass: HomeAssistant, _token: str) -> None:
+        raise repairs.InvalidTokenError
+
+    monkeypatch.setattr(repairs, "_async_validate_token", reject_token)
+    flow = repairs.GitHubTokenRepairFlow()
+    flow.hass = hass
+    flow.data = {"entry_id": entry.entry_id}
+
+    result = await flow.async_step_init(
+        {"github_token": "rejected-secret", CONF_CLEAR_GITHUB_TOKEN: False}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+
 async def test_finding_action_persists_across_entry_reload(
     hass: HomeAssistant,
 ) -> None:
     """Exercise a native action and HA Store persistence through a reload."""
     entry = await _setup_entry(hass)
-    manager = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     now = datetime(2026, 9, 16, 9, 0, tzinfo=UTC)
     candidates = build_finding_candidates(
         [],
@@ -139,10 +257,129 @@ async def test_finding_action_persists_across_entry_reload(
     assert state.attributes["active_findings"][0]["review_status"] == "acknowledged"
 
 
+async def test_todo_checkbox_acknowledges_and_restores_finding(
+    hass: HomeAssistant,
+) -> None:
+    """Use the native to-do action without copying a finding ID into a form."""
+    entry = await _setup_entry(hass)
+    manager = entry.runtime_data
+    now = datetime(2026, 9, 16, 9, 0, tzinfo=UTC)
+    candidates = build_finding_candidates(
+        [],
+        [
+            {
+                "repository": "example/archived",
+                "component": "Archived example",
+                "status": "archived",
+                "url": "https://github.com/example/archived",
+            }
+        ],
+    )
+    manager.data.update(
+        update_findings({}, candidates, {"example/archived"}, {"example/archived"}, now)
+    )
+    manager._publish()
+    await hass.async_block_till_done()
+
+    todo_state = hass.states.get("todo.ha_auditor_findings")
+    assert todo_state is not None
+    assert todo_state.state == "1"
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {
+            "entity_id": "select.ha_auditor_finding_filter",
+            "option": "updates",
+        },
+        blocking=True,
+    )
+    assert hass.states.get("todo.ha_auditor_findings").state == "0"
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {
+            "entity_id": "select.ha_auditor_finding_filter",
+            "option": "archived",
+        },
+        blocking=True,
+    )
+    assert hass.states.get("todo.ha_auditor_findings").state == "1"
+
+    await hass.services.async_call(
+        "todo",
+        "update_item",
+        {
+            "entity_id": "todo.ha_auditor_findings",
+            "item": "example/archived:health",
+            "status": "completed",
+        },
+        blocking=True,
+    )
+    assert hass.states.get("todo.ha_auditor_findings").state == "0"
+    finding_state = hass.states.get("sensor.ha_auditor_active_findings")
+    assert finding_state is not None
+    assert finding_state.attributes["finding_counts"]["acknowledged"] == 1
+
+    await hass.services.async_call(
+        "todo",
+        "update_item",
+        {
+            "entity_id": "todo.ha_auditor_findings",
+            "item": "example/archived:health",
+            "status": "needs_action",
+        },
+        blocking=True,
+    )
+    assert hass.states.get("todo.ha_auditor_findings").state == "1"
+    finding_state = hass.states.get("sensor.ha_auditor_active_findings")
+    assert finding_state is not None
+    assert finding_state.attributes["finding_counts"]["new"] == 1
+
+
+async def test_todo_rejects_stale_finding_with_translated_error(
+    hass: HomeAssistant,
+) -> None:
+    """Return a translated action error if a finding vanished before the update."""
+    entry = await _setup_entry(hass)
+    manager = entry.runtime_data
+    entity = AuditorFindingsTodo(manager, entry.entry_id)
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await entity.async_update_todo_item(
+            TodoItem(
+                uid="missing:finding",
+                summary="Missing",
+                status=TodoItemStatus.COMPLETED,
+            )
+        )
+
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == "finding_not_found"
+
+
+async def test_finding_action_rejects_missing_finding_with_translated_error(
+    hass: HomeAssistant,
+) -> None:
+    """Keep native action failures actionable and localizable."""
+    await _setup_entry(hass)
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ACKNOWLEDGE_FINDING,
+            {"finding_id": "missing:finding"},
+            blocking=True,
+        )
+
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == "finding_not_found"
+
+
 async def test_diagnostics_exclude_private_values(hass: HomeAssistant) -> None:
     """Diagnostics expose useful counts without credentials or private targets."""
     entry = await _setup_entry(hass)
-    manager = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     manager.data.update(
         {
             "status": "partial",
@@ -173,12 +410,118 @@ async def test_diagnostics_exclude_private_values(hass: HomeAssistant) -> None:
     assert "private-owner/private-repository" not in serialized
 
 
+async def test_full_audit_builds_confirmed_upgrade_path(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise the complete manager pipeline for one multi-release update."""
+    entry = await _setup_entry(hass)
+    manager = entry.runtime_data
+    repository = {
+        "repository": "example/component",
+        "entity_id": "update.example_component",
+        "title": "Example component",
+        "installed_version": "1.0.0",
+        "latest_version": "3.0.0",
+        "release_url": "https://github.com/example/component/releases/tag/v3.0.0",
+        "update_available": True,
+    }
+    manager.data["components"] = {
+        "example/component": {
+            **repository,
+            "initialized": True,
+            "last_release_id": 1,
+            "last_release_tag": "v1.0.0",
+            "release_source": "release",
+        }
+    }
+
+    monkeypatch.setattr(
+        manager,
+        "_discover_repositories",
+        lambda: ([repository], 0, []),
+    )
+
+    async def fake_metadata(
+        _repository: str,
+    ) -> tuple[dict[str, object], int]:
+        return (
+            {
+                "archived": False,
+                "pushed_at": "2026-09-20T00:00:00Z",
+                "html_url": "https://github.com/example/component",
+            },
+            4999,
+        )
+
+    releases = [
+        {
+            "id": 3,
+            "tag_name": "v3.0.0",
+            "name": "Version 3",
+            "body": "Requires Home Assistant 2026.9 or newer. Security fix.",
+            "published_at": "2026-09-20T00:00:00Z",
+            "html_url": "https://github.com/example/component/releases/tag/v3.0.0",
+            "source": "release",
+            "draft": False,
+            "prerelease": False,
+        },
+        {
+            "id": 2,
+            "tag_name": "v2.0.0",
+            "name": "Version 2",
+            "body": "Breaking change: remove the legacy option.",
+            "published_at": "2026-08-20T00:00:00Z",
+            "html_url": "https://github.com/example/component/releases/tag/v2.0.0",
+            "source": "release",
+            "draft": False,
+            "prerelease": False,
+        },
+        {
+            "id": 1,
+            "tag_name": "v1.0.0",
+            "name": "Version 1",
+            "body": "Installed baseline.",
+            "published_at": "2026-07-20T00:00:00Z",
+            "html_url": "https://github.com/example/component/releases/tag/v1.0.0",
+            "source": "release",
+            "draft": False,
+            "prerelease": False,
+        },
+    ]
+
+    async def fake_releases(
+        _repository: str,
+        _etag: str | None,
+        _latest_version: str,
+        _installed_version: str,
+    ) -> tuple[list[dict[str, object]], str, int]:
+        return releases, "etag-v3", 4998
+
+    monkeypatch.setattr(manager, "_fetch_repository_metadata", fake_metadata)
+    monkeypatch.setattr(manager, "_fetch_releases", fake_releases)
+
+    result = await manager._audit("full")
+
+    assert result["checked_this_run"] == 1
+    assert result["partial_audit"] is False
+    assert result["new_release_count"] == 2
+    assert result["updates_available"] == 1
+    update = result["available_updates"][0]
+    assert update["upgrade_path_status"] == "complete"
+    assert update["versions_behind"] == 2
+    assert update["version_path"] == ["1.0.0", "v2.0.0", "v3.0.0"]
+    assert update["upgrade_signal_counts"]["breaking_changes"] == 1
+    assert update["upgrade_signal_counts"]["security_fixes"] == 1
+    assert update["minimum_home_assistant_version"] == "2026.9"
+    assert result["finding_counts"]["new"] == 1
+
+
 async def test_authenticated_release_search_stops_on_matching_page(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Follow bounded Release pages only until the HACS target is found."""
     entry = await _setup_entry(hass)
-    manager = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     calls: list[tuple[str, str | None]] = []
 
     async def fake_github_get(
@@ -211,7 +554,7 @@ async def test_authenticated_release_search_continues_to_installed_boundary(
 ) -> None:
     """Fetch the next bounded page when target is found but installed is not."""
     entry = await _setup_entry(hass)
-    manager = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     calls: list[str] = []
 
     async def fake_github_get(
@@ -245,7 +588,7 @@ async def test_unauthenticated_search_uses_one_release_and_tag_page(
 ) -> None:
     """Keep anonymous lookup bounded while finding a target available as a tag."""
     entry = await _setup_entry(hass)
-    manager = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     manager.token = ""
     calls: list[str] = []
 
@@ -285,7 +628,7 @@ async def test_authenticated_release_pagination_is_capped_before_tag_fallback(
 ) -> None:
     """Never follow an unbounded number of authenticated Release pages."""
     entry = await _setup_entry(hass)
-    manager = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     calls: list[str] = []
 
     async def fake_github_get(

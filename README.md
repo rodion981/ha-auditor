@@ -120,8 +120,17 @@ immediate notifications.
 
 ## Managing findings
 
-Every active finding exposes a stable `finding_id`. Use it with the native HA
-Auditor actions from **Developer tools > Actions** or in an automation:
+The native `todo.ha_auditor_findings` list is the simplest review interface.
+Tick a finding to acknowledge it; clear the tick to restore it to `new`. The
+integration keeps the stable `finding_id` behind the list item, so this flow
+does not require copying IDs. The list cannot be used to create or delete
+items. Use `select.ha_auditor_finding_filter` to show all findings, updates,
+archived repositories or inactive repositories in that list.
+
+Snooze and ignore remain explicit HA Auditor actions from **Developer tools >
+Actions** or automations because a to-do checkbox cannot safely express their
+different meanings. Every active finding exposes the required stable
+`finding_id`:
 
 ```yaml
 action: custom_components_auditor.acknowledge_finding
@@ -143,7 +152,7 @@ automatically returns to `new`, even when the previous version was reviewed.
 
 ## Entities
 
-The integration creates five native Home Assistant entities:
+The integration creates seven native Home Assistant entities:
 
 | Entity | Purpose |
 | --- | --- |
@@ -152,6 +161,8 @@ The integration creates five native Home Assistant entities:
 | `binary_sensor.ha_auditor_attention_required` | Turns on only while at least one active finding is new and unreviewed. |
 | `binary_sensor.ha_auditor_audit_problem` | Turns on when the latest audit is partial or failed. |
 | `button.ha_auditor_run_audit` | Runs the most complete audit allowed by the configured GitHub credentials without sending a push notification. |
+| `todo.ha_auditor_findings` | Native review list: tick to acknowledge a finding and clear the tick to restore it to `new`. |
+| `select.ha_auditor_finding_filter` | Filters the native finding list by update, archived repository or inactive repository. |
 
 | Attribute | Meaning |
 | --- | --- |
@@ -196,8 +207,12 @@ error or interrupted request sequence. A successful unauthenticated batch stays
 `idle`; use `deferred_components` and `cycle_complete` to see whether that run
 covered the complete inventory.
 
-A ready-to-use native card is available in
-[`examples/dashboard.yaml`](examples/dashboard.yaml).
+Ready-to-use English and Ukrainian cards are available in
+[`examples/dashboard.yaml`](examples/dashboard.yaml) and
+[`examples/dashboard.uk.yaml`](examples/dashboard.uk.yaml). Critical-finding
+automation examples are also available in
+[`examples/automation-critical.yaml`](examples/automation-critical.yaml) and
+[`examples/automation-critical.uk.yaml`](examples/automation-critical.uk.yaml).
 
 ## How it works
 
@@ -303,6 +318,8 @@ translations, repository metadata, finding lifecycle and a basic secret scan.
 The runtime gate additionally loads the integration through Home Assistant,
 registers its entities and actions, verifies finding persistence across a
 config-entry reload and checks that diagnostics do not expose private values.
+The current Quality Scale self-assessment and measured coverage are documented
+in [`docs/QUALITY_SCALE.md`](docs/QUALITY_SCALE.md).
 
 Want to add another interface language? See
 [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-translation). Each locale is a

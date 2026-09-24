@@ -68,7 +68,16 @@ live Home Assistant installation test.
       across the confirmed path.
 - [x] Extract a minimum Home Assistant version only from explicit release-note
       wording.
+- [x] Add bilingual dashboard cards and critical-finding automations.
+- [x] Add native no-copy acknowledge/restore through one to-do list and a
+      native finding-type filter.
+- [x] Move runtime ownership from `hass.data` to typed
+      `ConfigEntry.runtime_data` without changing the Store format.
+- [x] Add translated negative action tests and runtime coverage for the full
+      multi-release audit path, config flow and GitHub-token Repair.
 - [x] Pass the dependency-free unit suite, Ruff and formatting checks.
+- [x] Pass 119 tests in local Linux/WSL with Home Assistant 2026.9.2 and reach
+      78.38% measured integration coverage.
 - [ ] Pass the Home Assistant runtime suite in Linux CI.
 - [ ] Validate complete, partial and tag-only paths on a live Home Assistant
       audit with real pending HACS updates.

@@ -12,6 +12,14 @@
   state one, otherwise keep compatibility unknown.
 - Continue bounded authenticated pagination until both release boundaries are
   found, while preserving the existing three-page maximum.
+- Add a native finding review to-do list: tick to acknowledge and clear the
+  tick to restore without copying `finding_id`.
+- Add one native filter select for all findings, updates, archived repositories
+  or inactive repositories.
+- Add synchronized English and Ukrainian dashboard cards and critical-finding
+  automation examples.
+- Move per-entry runtime ownership from `hass.data` to typed
+  `ConfigEntry.runtime_data` while preserving the existing Store data format.
 
 ## 1.6.1
 

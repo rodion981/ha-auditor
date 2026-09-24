@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import ComponentsAuditor
-from .const import DOMAIN
+from . import AuditorConfigEntry, ComponentsAuditor
 from .entity import AuditorEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: AuditorConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the manual audit button."""
-    manager: ComponentsAuditor = hass.data[DOMAIN][entry.entry_id]
+    manager = entry.runtime_data
     async_add_entities([RunAuditButton(manager, entry.entry_id)])
 
 

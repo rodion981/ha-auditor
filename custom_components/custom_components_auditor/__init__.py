@@ -88,7 +88,13 @@ from .release import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = (Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON)
+PLATFORMS = (
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.SELECT,
+    Platform.TODO,
+)
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -136,25 +142,20 @@ GITHUB_REPOSITORY_RE = re.compile(
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up actions and import a legacy YAML configuration."""
-    managers: dict[str, ComponentsAuditor] = hass.data.setdefault(DOMAIN, {})
 
     async def handle_run(call: ServiceCall) -> None:
-        manager = next(iter(managers.values()), None)
-        if manager is None:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="not_configured",
-            )
+        manager = get_manager()
         await manager.async_run(call.data["mode"], call.data["notify"])
 
     def get_manager() -> ComponentsAuditor:
-        manager = next(iter(managers.values()), None)
-        if manager is None:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="not_configured",
-            )
-        return manager
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            manager = getattr(entry, "runtime_data", None)
+            if isinstance(manager, ComponentsAuditor):
+                return manager
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="not_configured",
+        )
 
     async def apply_finding_action(call: ServiceCall, review_status: str) -> None:
         try:
@@ -226,7 +227,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: AuditorConfigEntry) -> bool:
     """Set up HA Auditor from a UI config entry."""
     settings = normalize_settings(entry.data, entry.options)
     translations = await async_get_translations(
@@ -239,13 +240,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     messages = {key: translations.get(f"{prefix}{key}", key) for key in MESSAGE_KEYS}
     manager = ComponentsAuditor(hass, entry.entry_id, settings, messages)
     await manager.async_initialize()
+    entry.runtime_data = manager
 
-    managers: dict[str, ComponentsAuditor] = hass.data.setdefault(DOMAIN, {})
-    managers[entry.entry_id] = manager
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
-        managers.pop(entry.entry_id, None)
+        entry.runtime_data = None  # type: ignore[assignment]
         manager.async_shutdown()
         raise
     manager.async_start_schedules()
@@ -253,14 +253,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: AuditorConfigEntry) -> bool:
     """Unload HA Auditor and cancel all background callbacks."""
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
-    managers: dict[str, ComponentsAuditor] = hass.data.get(DOMAIN, {})
-    manager = managers.pop(entry.entry_id, None)
-    if manager is not None:
-        manager.async_shutdown()
+    entry.runtime_data.async_shutdown()
     return True
 
 
@@ -299,6 +296,7 @@ class ComponentsAuditor:
         self._unsubscribers: list[Any] = []
         self._listeners: set[Callable[[], None]] = set()
         self._snooze_unsubscribe: Callable[[], None] | None = None
+        self.finding_filter = "all"
 
     async def async_initialize(self) -> None:
         """Restore the previous checkpoint and publish the sensor."""
@@ -1520,6 +1518,9 @@ class ComponentsAuditor:
         """Notify native Home Assistant entities about updated manager data."""
         for listener in tuple(self._listeners):
             listener()
+
+
+type AuditorConfigEntry = ConfigEntry[ComponentsAuditor]
 
 
 class RateLimitReached(Exception):
