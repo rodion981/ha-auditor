@@ -78,10 +78,11 @@ live Home Assistant installation test.
 - [x] Pass the dependency-free unit suite, Ruff and formatting checks.
 - [x] Pass 119 tests in local Linux/WSL with Home Assistant 2026.9.2 and reach
       78.38% measured integration coverage.
-- [ ] Pass the Home Assistant runtime suite in Linux CI.
+- [x] Pass the Home Assistant runtime suite in Linux CI for both `main` and
+      `v1.7.0-beta.1`.
 - [ ] Validate complete, partial and tag-only paths on a live Home Assistant
       audit with real pending HACS updates.
 - [ ] Confirm that the additional bounded pages stay within the expected GitHub
       request budget during a full live audit.
 - [x] Owner explicitly approves pushing and publishing `v1.7.0-beta.1`.
-- [ ] Publish the prerelease tag and GitHub Release.
+- [x] Publish the `v1.7.0-beta.1` prerelease tag and GitHub Release.
