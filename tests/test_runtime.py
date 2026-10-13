@@ -190,6 +190,95 @@ async def test_repair_flow_replaces_or_removes_rejected_token(
     assert entry.options["github_token"] == ""
 
 
+async def test_options_can_clear_omitted_optional_fields(hass: HomeAssistant) -> None:
+    """The frontend omits optional fields after users clear their contents."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    form = await hass.config_entries.options.async_init(entry.entry_id)
+    submitted = form["data_schema"](
+        {"daily_hour": 9, "weekly_weekday": "6", "max_requests_per_run": 45}
+    )
+    result = await hass.config_entries.options.async_configure(
+        form["flow_id"], submitted
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["excluded_repositories"] == []
+    assert entry.options["notify_service"] == ""
+    assert entry.data["github_token"] == "runtime-secret-token"
+
+
+@pytest.mark.parametrize("source", ["partial", "missing", "tag", "partial_security"])
+async def test_incomplete_update_path_preserves_risk_but_resolves_health(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    """A successful fetch with missing path evidence is not a clean risk check."""
+    entry = await _setup_entry(hass)
+    manager = entry.runtime_data
+    repository = {
+        "repository": "example/component",
+        "entity_id": "update.example_component",
+        "title": "Example component",
+        "installed_version": "qa-unmatched-installed",
+        "latest_version": "3.0.0",
+        "release_url": "https://github.com/example/component/releases/tag/v3.0.0",
+        "update_available": True,
+    }
+    seeded = update_findings(
+        {},
+        build_finding_candidates(
+            [{**repository, "severity": "critical"}],
+            [{**repository, "status": "archived"}],
+        ),
+        {"example/component"},
+        {"example/component"},
+        datetime.now(UTC),
+    )
+    manager.data.update(seeded)
+    monkeypatch.setattr(
+        manager, "_discover_repositories", lambda: ([repository], 0, [])
+    )
+
+    async def metadata(_repository: str) -> tuple[dict, int]:
+        return {"archived": False, "pushed_at": datetime.now(UTC).isoformat()}, 4999
+
+    async def releases(*_args: object) -> tuple[list[dict], str, int]:
+        return (
+            [
+                {
+                    "id": 3,
+                    "tag_name": "v2.0.0" if source == "missing" else "v3.0.0",
+                    "body": (
+                        "Security fix."
+                        if source == "partial_security"
+                        else "Maintenance release."
+                    ),
+                    "source": "tag" if source == "tag" else "release",
+                }
+            ],
+            "etag-v3",
+            4998,
+        )
+
+    monkeypatch.setattr(manager, "_fetch_repository_metadata", metadata)
+    monkeypatch.setattr(manager, "_fetch_releases", releases)
+    for _ in range(2):
+        manager.data.update(await manager._audit("full"))
+    assert manager.data["checked_this_run"] == 1
+    assert manager.data["partial_audit"] is False
+    assert manager.data["available_updates"][0]["upgrade_path_complete"] is False
+    assert manager.data["finding_counts"]["updates"] == 1
+    assert manager.data["active_findings"][0]["clear_confirmations"] == 0
+    assert manager.data["finding_counts"]["archived"] == 0
+    assert manager.data["recently_resolved_findings"][0]["kind"] == "repository_health"
+    repository["update_available"] = False
+    for _ in range(2):
+        manager.data.update(await manager._audit("full"))
+    assert manager.data["finding_counts"]["updates"] == 0
+    assert any(
+        item["kind"] == "update" for item in manager.data["recently_resolved_findings"]
+    )
+
+
 async def test_repair_flow_translates_invalid_token(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:

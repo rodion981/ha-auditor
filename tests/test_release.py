@@ -349,6 +349,39 @@ def test_release_signals_ignore_negated_breaking_change() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Critical and important updates, plus archived repositories, "
+        "activate immediately.\n"
+        "Критичні й важливі оновлення та архівовані репозиторії активуються одразу.",
+        "Runtime-tested Home Assistant support, privacy-preserving diagnostics, "
+        "Recorder safeguards, and clarified GitHub token security.",
+        "Документація пояснює безпеку GitHub-токена та важливі знахідки.",
+        "No security fixes in this maintenance release.",
+    ],
+)
+def test_generic_risk_descriptions_are_not_change_evidence(text: str) -> None:
+    assert release.classify_release(text) not in {"critical", "important"}
+    assert "breaking_changes" not in release.release_signals(text)
+    assert "security_fixes" not in release.release_signals(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Security fix for API authentication.",
+        "Fixed a security vulnerability in authentication.",
+        "Patched CVE-2026-12345 in the bundled dependency.",
+        "Виправлено вразливість авторизації.",
+        "Виправлення безпеки для авторизації.",
+    ],
+)
+def test_explicit_security_fixes_still_require_attention(text: str) -> None:
+    assert release.classify_release(text) == "important"
+    assert "security_fixes" in release.release_signals(text)
+
+
 def test_minimum_home_assistant_version_requires_explicit_wording() -> None:
     assert (
         release.extract_minimum_home_assistant_version(

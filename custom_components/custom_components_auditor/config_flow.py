@@ -43,11 +43,13 @@ def _settings_schema(current: dict[str, Any], *, allow_token_clear: bool) -> vol
         ),
         vol.Optional(
             CONF_NOTIFY_SERVICE,
-            default=current[CONF_NOTIFY_SERVICE],
+            description={"suggested_value": current[CONF_NOTIFY_SERVICE]},
         ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
         vol.Optional(
             CONF_EXCLUDED_REPOSITORIES,
-            default="\n".join(current[CONF_EXCLUDED_REPOSITORIES]),
+            description={
+                "suggested_value": "\n".join(current[CONF_EXCLUDED_REPOSITORIES])
+            },
         ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)),
         vol.Required(
             CONF_DAILY_HOUR,

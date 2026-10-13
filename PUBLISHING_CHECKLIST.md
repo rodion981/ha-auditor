@@ -25,8 +25,9 @@ Release preparation for `rodion981/ha-auditor`.
 - [x] Confirm the hassfest and runtime-test jobs pass for `1.5.1` on the public
       branch.
 - [x] Validate UI setup and options reload in Home Assistant.
-- [ ] Install the repository as a HACS custom repository in a clean test Home
-      Assistant instance.
+- [x] Install the repository through HACS with no existing HA Auditor entry,
+      then complete native setup on the test Home Assistant instance
+      (`v1.7.0-beta.1`, 2026-10-13).
 - [x] Validate finding activation and a repeated audit on a live Home Assistant
       instance.
 - [x] Validate acknowledge, restore, snooze and ignore actions on a live Home
@@ -86,3 +87,31 @@ live Home Assistant installation test.
       request budget during a full live audit.
 - [x] Owner explicitly approves pushing and publishing `v1.7.0-beta.1`.
 - [x] Publish the `v1.7.0-beta.1` prerelease tag and GitHub Release.
+
+### v1.7.0-beta.1 live result, 2026-10-13
+
+Clean HACS installation, Ukrainian setup, all seven entities, acknowledge and
+restore through To-do, review persistence across reload, native filtering,
+translated negative action errors and repeated 5/5 ordinary audits passed.
+Complete and partial upgrade paths were exercised with controlled state
+overrides; no real pending HACS updates were present.
+
+Stable remains blocked by generic-word classification false positives,
+resolution of an existing update finding with an incomplete upgrade path,
+and inability to clear exclusions with an empty optional UI field.
+See [the live validation report](docs/validation/v1.7.0-beta.1-live.md).
+
+## v1.7.0-beta.2 regression gate
+
+- [x] Fix generic severity/token-security descriptions triggering risk findings.
+- [x] Preserve update findings for incomplete paths, including lower-severity
+      target notes, independently of repository-health resolution.
+- [x] Use suggested values instead of old-value defaults for clearable optional
+      notification/exclusion fields.
+- [x] Pass the local 133-test Home Assistant 2026.9.2 suite with 79.34% coverage,
+      Ruff and formatting checks.
+- [x] Owner approves fixing, publishing the next beta and live revalidation.
+- [ ] Verify green `main` and exact `v1.7.0-beta.2` tag CI.
+- [ ] Publish the beta.2 GitHub prerelease through Git/CLI.
+- [ ] Install beta.2 on the owner's test HA and recheck all three regressions.
+- [ ] Restore test fixtures/settings and confirm repeated full ordinary audits.

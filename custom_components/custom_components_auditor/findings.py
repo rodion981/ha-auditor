@@ -93,9 +93,12 @@ def update_findings(
     checked_repositories: Iterable[str],
     active_repositories: Iterable[str],
     now: datetime,
+    *,
+    unassessed_update_repositories: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Advance finding confirmation and resolution state after an audit run."""
     checked = {item.casefold() for item in checked_repositories}
+    unassessed_updates = {item.casefold() for item in unassessed_update_repositories}
     active_repositories_set = {item.casefold() for item in active_repositories}
     timestamp = now.isoformat()
     state = normalize_finding_workflow(
@@ -120,6 +123,8 @@ def update_findings(
         repository = str(finding.get("repository") or "").casefold()
         if repository not in checked or finding_id in candidate_map:
             continue
+        if finding.get("kind") == "update" and repository in unassessed_updates:
+            continue
         if finding.get("status") == "pending":
             del state[finding_id]
             continue
@@ -134,6 +139,15 @@ def update_findings(
 
     for finding_id, candidate in candidate_map.items():
         previous = state.get(finding_id)
+        if (
+            previous is not None
+            and previous.get("status") == "active"
+            and candidate.get("kind") == "update"
+            and str(candidate.get("repository") or "").casefold() in unassessed_updates
+            and _SEVERITY_ORDER.get(str(previous.get("severity")), 0)
+            > _SEVERITY_ORDER.get(str(candidate.get("severity")), 0)
+        ):
+            continue
         if (
             previous is None
             or previous.get("fingerprint") != candidate.get("fingerprint")

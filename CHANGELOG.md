@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 1.7.0-beta.2
+
+- Stop treating generic critical/important vocabulary and token-security
+  documentation as evidence of incompatible changes or security fixes.
+- Recognize explicit English and Ukrainian security-fix wording and CVE
+  references while refreshing assessments cached with the older rules.
+- Preserve existing update-risk findings when the release path is partial,
+  unavailable, tag-only or not checked; repository-health findings continue
+  their independent lifecycle. Incomplete evidence cannot downgrade a known
+  higher-severity update finding.
+- Allow users to clear exclusions and the notification action in the options
+  form while still showing their current values and preserving a saved token.
+- Add regressions for the three defects reproduced during beta.1 live testing.
+
 ## 1.7.0-beta.1
 
 - Build a confirmed release path from the installed HACS version through every

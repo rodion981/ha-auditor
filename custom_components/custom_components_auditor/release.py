@@ -13,7 +13,7 @@ MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
 UPDATE_SUFFIX_RE = re.compile(r"\s+update\s*$", re.IGNORECASE)
-CLASSIFICATION_VERSION = 5
+CLASSIFICATION_VERSION = 6
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 MINIMUM_HOME_ASSISTANT_PATTERNS = (
     re.compile(
@@ -60,20 +60,15 @@ CRITICAL_TERMS = (
     "changed api",
     "removed functionality",
     "несуміс",
-    "критич",
     "видалено підтримку",
 )
 IMPORTANT_TERMS = (
-    "security",
     "data loss",
-    "important",
     "new service",
     "behavior change",
     "behaviour change",
     "minimum home assistant",
     "deprecat",
-    "важлив",
-    "безпек",
     "нова служба",
 )
 FEATURE_TERMS = (
@@ -93,6 +88,15 @@ FEATURE_TERMS = (
     "нова можливість",
     "підтримку",
 )
+SECURITY_FIX_RE = re.compile(
+    r"\bsecurity\s+(?:fix(?:es)?|patch(?:es)?|update(?:s)?)\b"
+    r"|\b(?:fix(?:ed|es|ing)?|patch(?:ed|es|ing)?|resolv(?:e|ed|es|ing)"
+    r"|address(?:ed|es|ing)?)\b[^\n.;]{0,100}"
+    r"\b(?:security|vulnerabilit\w*|cve-\d{4}-\d+)\b"
+    r"|\b(?:виправ\w*|усун\w*)\b[^\n.;]{0,100}"
+    r"\b(?:безпек\w*|вразлив\w*)\b"
+)
+CVE_RE = re.compile(r"\bcve-\d{4}-\d{4,}\b")
 
 
 def normalize_component_title(title: str) -> str:
@@ -110,8 +114,24 @@ def classify_release(text: str) -> str:
 def classify_release_details(text: str) -> tuple[str, str]:
     """Classify release notes and return the term that caused the decision."""
     lowered = _normalized_classification_text(text)
+    for term in CRITICAL_TERMS:
+        if term in lowered:
+            return "critical", term
+    security_fix = SECURITY_FIX_RE.search(lowered)
+    if security_fix:
+        matched = security_fix.group()
+        term = next(
+            (
+                term
+                for term in ("security", "cve-", "безпек", "вразлив")
+                if term in matched
+            ),
+            "vulnerability",
+        )
+        return "important", term
+    if CVE_RE.search(lowered):
+        return "important", "cve-"
     for severity, terms in (
-        ("critical", CRITICAL_TERMS),
         ("important", IMPORTANT_TERMS),
         ("feature", FEATURE_TERMS),
     ):
@@ -130,6 +150,9 @@ def _normalized_classification_text(text: str) -> str:
         "without breaking changes",
         "not a breaking change",
         "non-breaking change",
+        "no security fixes",
+        "no security patches",
+        "without security fixes",
     ):
         lowered = lowered.replace(harmless_phrase, "")
     return lowered
@@ -141,16 +164,7 @@ def release_signals(text: str) -> list[str]:
     signals: list[str] = []
     if any(term in lowered for term in CRITICAL_TERMS):
         signals.append("breaking_changes")
-    if any(
-        term in lowered
-        for term in (
-            "security",
-            "vulnerability",
-            "cve-",
-            "\u0431\u0435\u0437\u043f\u0435\u043a",
-            "\u0432\u0440\u0430\u0437\u043b\u0438\u0432",
-        )
-    ):
+    if SECURITY_FIX_RE.search(lowered):
         signals.append("security_fixes")
     if any(
         term in lowered

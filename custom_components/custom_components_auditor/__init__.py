@@ -708,6 +708,11 @@ class ComponentsAuditor:
             checked_repositories,
             active_keys,
             dt_util.utcnow(),
+            unassessed_update_repositories={
+                str(update["repository"])
+                for update in available_updates
+                if update.get("upgrade_path_complete") is not True
+            },
         )
 
         return {
