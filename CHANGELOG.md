@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.7.0-beta.1
+
 - Build a confirmed release path from the installed HACS version through every
   matching intermediate GitHub Release to the target version.
 - Count versions behind and intermediate releases without comparing arbitrary

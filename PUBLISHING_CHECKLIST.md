@@ -83,5 +83,5 @@ live Home Assistant installation test.
       audit with real pending HACS updates.
 - [ ] Confirm that the additional bounded pages stay within the expected GitHub
       request budget during a full live audit.
-- [ ] Owner explicitly approves publishing a `v1.7.0` prerelease.
+- [x] Owner explicitly approves pushing and publishing `v1.7.0-beta.1`.
 - [ ] Publish the prerelease tag and GitHub Release.
