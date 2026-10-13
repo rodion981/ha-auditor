@@ -96,10 +96,12 @@ translated negative action errors and repeated 5/5 ordinary audits passed.
 Complete and partial upgrade paths were exercised with controlled state
 overrides; no real pending HACS updates were present.
 
-Stable remains blocked by generic-word classification false positives,
+Beta.1 live testing blocked stable on generic-word classification false positives,
 resolution of an existing update finding with an incomplete upgrade path,
 and inability to clear exclusions with an empty optional UI field.
-See [the live validation report](docs/validation/v1.7.0-beta.1-live.md).
+See [the beta.1 live validation report](docs/validation/v1.7.0-beta.1-live.md).
+These three regressions were subsequently fixed and revalidated in beta.2;
+the real pending-update and large-inventory gates above remain open.
 
 ## v1.7.0-beta.2 regression gate
 
@@ -111,7 +113,10 @@ See [the live validation report](docs/validation/v1.7.0-beta.1-live.md).
 - [x] Pass the local 133-test Home Assistant 2026.9.2 suite with 79.34% coverage,
       Ruff and formatting checks.
 - [x] Owner approves fixing, publishing the next beta and live revalidation.
-- [ ] Verify green `main` and exact `v1.7.0-beta.2` tag CI.
-- [ ] Publish the beta.2 GitHub prerelease through Git/CLI.
-- [ ] Install beta.2 on the owner's test HA and recheck all three regressions.
-- [ ] Restore test fixtures/settings and confirm repeated full ordinary audits.
+- [x] Verify green `main` and exact `v1.7.0-beta.2` tag CI.
+- [x] Publish the beta.2 GitHub prerelease through Git/CLI.
+- [x] Install beta.2 on the owner's test HA and recheck all three regressions.
+- [x] Restore test fixtures/settings and confirm repeated full ordinary audits.
+
+See [the beta.2 live validation report](docs/validation/v1.7.0-beta.2-live.md)
+for controlled fixtures, DNS failures, recovery and the remaining evidence limits.
