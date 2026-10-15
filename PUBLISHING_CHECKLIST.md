@@ -130,8 +130,12 @@ for controlled fixtures, DNS failures, recovery and the remaining evidence limit
 - [x] Pass 153 Linux/Home Assistant tests with 79.79% measured coverage.
 - [x] Pass local Windows tests, Ruff, formatting and strict template rendering.
 - [x] Owner approves publication, installation and live validation of beta.3.
-- [ ] Verify green main and exact beta.3 tag CI.
-- [ ] Publish beta.3 through Git/CLI.
-- [ ] Install the exact beta.3 through HACS and validate the native risk excerpt.
-- [ ] Validate explicit prerelease metadata and rendered path on the test HA.
-- [ ] Restore controlled fixtures and confirm ordinary audit results.
+- [x] Verify green main and exact beta.3 tag CI.
+- [x] Publish beta.3 through Git/CLI.
+- [x] Install the exact beta.3 through HACS and verify all seven native entities.
+- [x] Validate explicit prerelease metadata and both live example templates.
+- [ ] Extract concrete HACS change-list items instead of their introductory sentence.
+- [x] Restore controlled fixtures and confirm two ordinary 8/8 audits without errors.
+
+The [beta.3 live report](docs/validation/v1.7.0-beta.3-live.md) separates
+confirmed passes from the failed concrete-excerpt acceptance check.
