@@ -139,3 +139,15 @@ for controlled fixtures, DNS failures, recovery and the remaining evidence limit
 
 The [beta.3 live report](docs/validation/v1.7.0-beta.3-live.md) separates
 confirmed passes from the failed concrete-excerpt acceptance check.
+
+## v1.7.0-beta.4 regression gate
+
+- [x] Prefer dedicated risk sections and extract items after list introductions.
+- [x] Avoid crossing sections or filling absent risk evidence with other notes.
+- [x] Verify actual public HACS 2.0.0 notes locally, preserving their source.
+- [x] Pass 166 Linux/HA tests with 79.99% coverage and 147 Windows tests.
+- [x] Owner approves publishing beta.4 and checking it on test HAOS.
+- [ ] Verify green main and exact beta.4 tag CI and publish through Git/CLI.
+- [ ] Install beta.4 through HACS, restart Core and verify seven entities.
+- [ ] Repeat the HACS path scenario and verify the concrete native to-do excerpt.
+- [ ] Restore fixtures/settings and confirm ordinary audits without errors.

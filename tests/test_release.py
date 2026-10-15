@@ -169,6 +169,96 @@ def test_summary_does_not_take_features_from_an_empty_breaking_section() -> None
     assert "Breaking Changes" not in release.summarize_release(body)
 
 
+def test_summary_prefers_actual_breaking_section_to_hacs_style_intro() -> None:
+    body = (
+        "## What's Changed\n"
+        "As a major version bump, this release includes breaking changes:\n\n"
+        "- Back up your configuration before updating.\n"
+        "- Read the change list below.\n\n"
+        "## New features\n- Added a dashboard.\n"
+        "### 💥 Breaking changes\n"
+        "- Requires Home Assistant 2024.4.1 or later.\n"
+        "- The legacy sensor platform is removed.\n"
+        "Full Changelog: https://example.test/changelog"
+    )
+    assert release.summarize_release(body) == (
+        "Requires Home Assistant 2024.4.1 or later.; "
+        "The legacy sensor platform is removed."
+    )
+
+
+@pytest.mark.parametrize(
+    "lead_in",
+    [
+        "As a major version bump, this release includes breaking changes:",
+        "This release contains breaking changes:",
+        "The following security fixes are included:",
+        "Цей реліз містить такі несумісні зміни:",
+    ],
+)
+def test_summary_extracts_list_items_after_risk_lead_in(lead_in: str) -> None:
+    body = (
+        f"Thanks to everyone who helped.\n{lead_in}\n\n"
+        "- Rename the old configuration key.\n"
+        "- Recreate the legacy sensor template.\n"
+        "## Features\n- Added an unrelated chart."
+    )
+    assert release.summarize_release(body) == (
+        "Rename the old configuration key.; Recreate the legacy sensor template."
+    )
+
+
+@pytest.mark.parametrize(
+    "following",
+    [
+        "## Features\n- Added an unrelated chart.",
+        "**Features**\n- Added an unrelated chart.",
+        "---\n- Added an unrelated chart.",
+        "Thanks to the community.\n- Added an unrelated chart.",
+        "",
+    ],
+)
+def test_empty_risk_list_never_borrows_unrelated_content(following: str) -> None:
+    body = "This release includes breaking changes:\n\n" + following
+    assert release.summarize_release(body) == ""
+
+
+def test_risk_section_skips_repeated_lead_in_and_supports_numbered_items() -> None:
+    body = (
+        "## Breaking changes\nThis release includes breaking changes:\n\n"
+        "1. Rename the old configuration key.\n"
+        "2. Recreate the legacy sensor template.\n"
+        "## Features\n- Added an unrelated chart."
+    )
+    assert release.summarize_release(body) == (
+        "1. Rename the old configuration key.; 2. Recreate the legacy sensor template."
+    )
+
+
+def test_concrete_inline_risk_ending_in_colon_is_not_a_generic_lead_in() -> None:
+    statement = "Breaking change: the old API now requires this object:"
+    assert release.summarize_release(statement) == statement
+
+
+def test_complete_path_keeps_empty_risk_excerpt_and_its_source() -> None:
+    releases = [
+        {"tag_name": "3", "body": "Maintenance release."},
+        {
+            "tag_name": "2",
+            "body": "This release includes breaking changes:\n## Features",
+            "html_url": "https://example.test/2",
+        },
+        {"tag_name": "1", "body": "Installed release."},
+    ]
+    assessment = release.assess_available_update(
+        {"installed_version": "1", "latest_version": "3"}, releases, MESSAGES
+    )
+    assert assessment["severity"] == "critical"
+    assert assessment["summary"] == ""
+    assert assessment["summary_version"] == "2"
+    assert assessment["summary_url"] == "https://example.test/2"
+
+
 @pytest.mark.parametrize("target_prerelease", [False, True])
 def test_path_marks_prereleases_from_github_metadata(target_prerelease: bool) -> None:
     releases = [

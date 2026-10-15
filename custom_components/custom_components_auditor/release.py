@@ -13,13 +13,20 @@ MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
 UPDATE_SUFFIX_RE = re.compile(r"\s+update\s*$", re.IGNORECASE)
-CLASSIFICATION_VERSION = 7
+CLASSIFICATION_VERSION = 8
 SECTION_LABEL_RE = re.compile(
     r"\W*(?:breaking(?: changes?)?|security(?: fixes| patches| updates)?"
     r"|deprecations?|features?|bug fixes|what's changed)\W*",
     re.IGNORECASE,
 )
 MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+")
+MARKDOWN_RULE_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+")
+RISK_LIST_LEAD_IN_RE = re.compile(
+    r"(?:\b(?:includes?|contains?|following|below|changes|fixes|patches)\b"
+    r"|містить|містять|наступні|нижче)[^.!?]*:\s*$",
+    re.IGNORECASE,
+)
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 MINIMUM_HOME_ASSISTANT_PATTERNS = (
     re.compile(
@@ -230,16 +237,36 @@ def summarize_release(body: str) -> str:
     ]
     severity, _matched = classify_release_details(body)
     if severity in {"critical", "important"}:
-        for index, (_raw, line) in enumerate(lines):
-            if classify_release(line) != severity:
-                continue
-            if SECTION_LABEL_RE.fullmatch(line):
-                # A bare heading is not evidence. Never cross the next section.
+        risk_lines = [
+            (index, line)
+            for index, (_raw, line) in enumerate(lines)
+            if classify_release(line) == severity
+        ]
+        # Prefer a dedicated section to concrete inline evidence, then lead-ins.
+        risk_lines.sort(
+            key=lambda item: (
+                0
+                if SECTION_LABEL_RE.fullmatch(item[1])
+                else 2
+                if RISK_LIST_LEAD_IN_RE.search(item[1])
+                else 1
+            )
+        )
+        for index, line in risk_lines:
+            lead_in = RISK_LIST_LEAD_IN_RE.search(line)
+            if SECTION_LABEL_RE.fullmatch(line) or lead_in:
+                # Neither a heading nor a list introduction is concrete evidence.
                 evidence: list[str] = []
                 for next_raw, next_line in lines[index + 1 :]:
-                    if MARKDOWN_HEADING_RE.match(next_raw) or (
-                        next_line and SECTION_LABEL_RE.fullmatch(next_line)
+                    if (
+                        MARKDOWN_HEADING_RE.match(next_raw)
+                        or MARKDOWN_RULE_RE.match(next_raw)
+                        or (next_line and SECTION_LABEL_RE.fullmatch(next_line))
                     ):
+                        break
+                    if not next_line or RISK_LIST_LEAD_IN_RE.search(next_line):
+                        continue
+                    if lead_in and not LIST_ITEM_RE.match(next_raw):
                         break
                     if len(next_line) >= 12 and not next_line.lower().startswith(
                         "full changelog"
@@ -252,6 +279,8 @@ def summarize_release(body: str) -> str:
                 excerpt = line
             if excerpt:
                 return excerpt[:280].rstrip() + ("…" if len(excerpt) > 280 else "")
+        # Keep missing evidence empty instead of borrowing unrelated features.
+        return ""
 
     candidates: list[str] = []
     for _raw_line, line in lines:
@@ -595,7 +624,7 @@ def assess_available_update(
         summary = summarize_release(body)
         base["summary_version"] = str(release.get("tag_name") or latest_version)
         base["summary_url"] = str(release.get("html_url") or "")
-        if upgrade_path["upgrade_path_complete"] and upgrade_path["upgrade_summary"]:
+        if upgrade_path["upgrade_path_complete"]:
             summary = upgrade_path["upgrade_summary"]
             base["summary_version"] = upgrade_path["upgrade_summary_version"]
             base["summary_url"] = upgrade_path["upgrade_summary_url"]

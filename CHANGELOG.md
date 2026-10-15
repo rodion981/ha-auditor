@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.7.0-beta.4
+
+- Prefer dedicated risk sections over introductory risk sentences; extract
+  concrete items after list lead-ins without crossing another section.
+- Leave an absent risk excerpt empty while keeping its actual release source,
+  instead of substituting unrelated target-release notes.
+- Refresh cached beta.3 assessments with rules version 8.
+
 ## 1.7.0-beta.3
 
 - Prefer concrete risk excerpts over release introductions, including the

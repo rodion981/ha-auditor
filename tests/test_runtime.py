@@ -525,7 +525,7 @@ async def test_full_audit_builds_confirmed_upgrade_path(
             "available_update": {
                 "installed_version": "1.0.0",
                 "latest_version": "3.0.0",
-                "classification_version": 6,
+                "classification_version": 7,
             },
         }
     }
@@ -564,7 +564,11 @@ async def test_full_audit_builds_confirmed_upgrade_path(
             "id": 2,
             "tag_name": "v2.0.0",
             "name": "Version 2",
-            "body": "Breaking change: remove the legacy option.",
+            "body": (
+                "This release includes breaking changes:\n"
+                "- Remove the legacy option.\n"
+                "## Features\n- Added an unrelated chart."
+            ),
             "published_at": "2026-08-20T00:00:00Z",
             "html_url": "https://github.com/example/component/releases/tag/v2.0.0",
             "source": "release",
@@ -614,7 +618,7 @@ async def test_full_audit_builds_confirmed_upgrade_path(
     assert update["prereleases_behind"] == 1
     assert update["upgrade_releases"][0]["prerelease"] is True
     assert update["summary_version"] == "v2.0.0"
-    assert update["summary"] == "Breaking change: remove the legacy option."
+    assert update["summary"] == "Remove the legacy option."
 
     manager.data.update(result)
     manager._publish()
@@ -622,7 +626,9 @@ async def test_full_audit_builds_confirmed_upgrade_path(
     entity = AuditorFindingsTodo(manager, entry.entry_id)
     description = entity.todo_items[0].description
     assert description is not None
-    assert "v2.0.0: Breaking change: remove the legacy option." in description
+    assert "v2.0.0: Remove the legacy option." in description
+    assert "includes breaking changes" not in description
+    assert "unrelated chart" not in description
     assert "https://github.com/example/component/releases/tag/v2.0.0" in description
     assert "https://github.com/example/component/releases/tag/v3.0.0" in description
 
