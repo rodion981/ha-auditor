@@ -105,12 +105,19 @@ class AuditorFindingsTodo(AuditorEntity, TodoListEntity):
             or finding.get("finding_type")
             or "Finding"
         )
+        summary = str(finding.get("summary") or "")
+        summary_version = str(finding.get("summary_version") or "")
+        evidence = f"{summary_version}: {summary}" if summary_version else summary
         description_parts = [
             str(value)
             for value in (
+                evidence,
                 finding.get("recommendation"),
                 finding.get("repository"),
                 finding.get("url"),
+                finding.get("summary_url")
+                if finding.get("summary_url") != finding.get("url")
+                else None,
             )
             if value
         ]

@@ -160,6 +160,34 @@ def test_acknowledged_finding_stays_active_but_no_longer_new() -> None:
     assert result["active_findings"][0]["acknowledged_at"] == NOW.isoformat()
 
 
+def test_refreshing_risk_excerpt_preserves_finding_id_and_review_state() -> None:
+    candidates = findings.build_finding_candidates([_update()], [])
+    active = _run({}, candidates)
+    finding_id = active["active_findings"][0]["id"]
+    reviewed = findings.set_finding_review_state(
+        active["findings"], finding_id, findings.REVIEW_ACKNOWLEDGED, NOW
+    )
+    refreshed = {
+        **_update(),
+        "summary": "Rename the old configuration key.",
+        "summary_version": "1.5.0",
+        "summary_url": "https://example.test/1.5.0",
+    }
+
+    result = _run(
+        reviewed["findings"],
+        findings.build_finding_candidates([refreshed], []),
+        NOW + timedelta(hours=1),
+    )
+    finding = result["active_findings"][0]
+    assert finding["id"] == finding_id
+    assert finding["review_status"] == findings.REVIEW_ACKNOWLEDGED
+    assert finding["summary"] == refreshed["summary"]
+    assert finding["summary_version"] == "1.5.0"
+    assert finding["summary_url"] == refreshed["summary_url"]
+    assert result["finding_counts"]["new"] == 0
+
+
 def test_snoozed_finding_reopens_after_its_deadline() -> None:
     candidate = findings.build_finding_candidates([_update()], [])
     active = _run({}, candidate)

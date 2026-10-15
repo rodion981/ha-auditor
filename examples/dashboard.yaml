@@ -14,6 +14,7 @@ cards:
       {% set finding_counts = state_attr(findings_entity, 'finding_counts') or {} %}
       {% set pending = state_attr(findings_entity, 'findings_pending_confirmation') | int(0) %}
       {% set excluded = state_attr(entity, 'excluded_components') | int(0) %}
+      {% set updates = state_attr(entity, 'available_updates') or [] %}
       ## HACS release audit
       Audit status: **{{ status or 'not run' }}** · problem: **{{ states('binary_sensor.ha_auditor_audit_problem') }}**<br>
       Checked: **{{ checked }}/{{ targeted }}** selected, **{{ total }}** total<br>
@@ -38,12 +39,26 @@ cards:
       {% set confirmations = item.get('confirmations') | int(0) %}
       {% set snoozed_until = item.get('snoozed_until') %}
       - {{ marker }} **{{ component }}:** {{ finding_type }}{% if kind == 'update' %} · `{{ installed_version }}` → `{{ latest_version }}`{% endif %}{% if url %} · [details]({{ url }}){% endif %}
+        {% if item.get('summary') %}{{ item.get('summary') }}{% if item.get('summary_url') %} · [source {{ item.get('summary_version') or '' }}]({{ item.get('summary_url') }}){% endif %}{% endif %}
         {% if recommendation %}{{ recommendation }}{% endif %}
         Review: {{ review_status }} · ID: `{{ finding_id }}`
         First seen: {{ first_seen }} · confirmations: {{ confirmations }}{% if snoozed_until %} · snoozed until: {{ snoozed_until }}{% endif %}
       {% endfor %}
       {% else %}
       No actionable findings are active.
+      {% endif %}
+
+      {% if updates %}
+      ### Available updates and release paths
+      {% for update in updates[:10] %}
+      - **{{ update.get('component') or update.get('repository') }}:** `{{ update.get('installed_version') or '?' }}` → `{{ update.get('latest_version') or '?' }}`{% if update.get('target_prerelease') %} _(prerelease)_{% endif %}
+        {% if update.get('upgrade_path_complete') %}
+        {% if update.get('stable_releases_behind') is not none and update.get('prereleases_behind') is not none %}Releases in path: {{ update.get('versions_behind') }} · stable: {{ update.get('stable_releases_behind') }} · prerelease: {{ update.get('prereleases_behind') }}.{% endif %}
+        Path: `{{ update.get('installed_version') or '?' }}`{% if update.get('installed_prerelease') %} _(prerelease)_{% endif %}{% for step in update.get('upgrade_releases') or [] %} → `{{ step.get('version') or '?' }}`{% if step.get('prerelease') %} _(prerelease)_{% endif %}{% endfor %}
+        {% if update.get('upgrade_path_truncated') %}Some intermediate releases are hidden; counts cover the full confirmed path.{% endif %}
+        {% else %}The full path is unconfirmed; the number of missed releases is unknown.{% endif %}
+      {% endfor %}
+      Prereleases are marked separately but remain part of the risk analysis. This is not a list of mandatory installations.
       {% endif %}
   - type: todo-list
     entity: todo.ha_auditor_findings

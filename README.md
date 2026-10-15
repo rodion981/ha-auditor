@@ -235,6 +235,21 @@ versions. Risk classification then covers every confirmed release in that path,
 not only the target release. Breaking-change, security, deprecation and feature
 signals are counted separately in `upgrade_signal_counts`.
 
+Risk summaries prefer the concrete incompatible change or security fix over
+release introductions. For a complete path, the summary comes from the
+highest-severity release, which can be an intermediate release rather than the
+target. `summary_version` and `summary_url` identify that source; the main
+`url` still links to the target release. Native to-do items and example cards
+show this excerpt in its original language, without inventing a translation.
+
+`versions_behind` counts all confirmed GitHub Releases in the path, not mandatory
+installation steps. `stable_releases_behind` and `prereleases_behind` split that
+total using GitHub's prerelease flag, even for tags such as `3.7.1` without a
+beta suffix. Each `upgrade_releases` item includes `prerelease`;
+`installed_prerelease` and `target_prerelease` mark the endpoints. Prereleases
+remain in the risk analysis, so their warnings are not silently discarded.
+Incomplete paths keep counts unknown rather than reporting zero.
+
 If the installed boundary is outside the bounded lookup or has no matching
 GitHub Release, the path is `partial`; counts remain unknown instead of being
 estimated. `minimum_home_assistant_version` is populated only when release notes

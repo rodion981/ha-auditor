@@ -120,3 +120,18 @@ the real pending-update and large-inventory gates above remain open.
 
 See [the beta.2 live validation report](docs/validation/v1.7.0-beta.2-live.md)
 for controlled fixtures, DNS failures, recovery and the remaining evidence limits.
+
+## v1.7.0-beta.3 release gate
+
+- [x] Prefer concrete risk excerpts with intermediate-release provenance.
+- [x] Expose the excerpt in native to-do items and bilingual example cards.
+- [x] Mark prereleases from GitHub metadata and split confirmed path counts.
+- [x] Preserve finding IDs, review states and incomplete-path safeguards.
+- [x] Pass 153 Linux/Home Assistant tests with 79.79% measured coverage.
+- [x] Pass local Windows tests, Ruff, formatting and strict template rendering.
+- [x] Owner approves publication, installation and live validation of beta.3.
+- [ ] Verify green main and exact beta.3 tag CI.
+- [ ] Publish beta.3 through Git/CLI.
+- [ ] Install the exact beta.3 through HACS and validate the native risk excerpt.
+- [ ] Validate explicit prerelease metadata and rendered path on the test HA.
+- [ ] Restore controlled fixtures and confirm ordinary audit results.

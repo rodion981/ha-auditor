@@ -521,6 +521,12 @@ async def test_full_audit_builds_confirmed_upgrade_path(
             "last_release_id": 1,
             "last_release_tag": "v1.0.0",
             "release_source": "release",
+            "etag": "old-etag",
+            "available_update": {
+                "installed_version": "1.0.0",
+                "latest_version": "3.0.0",
+                "classification_version": 6,
+            },
         }
     }
 
@@ -563,7 +569,7 @@ async def test_full_audit_builds_confirmed_upgrade_path(
             "html_url": "https://github.com/example/component/releases/tag/v2.0.0",
             "source": "release",
             "draft": False,
-            "prerelease": False,
+            "prerelease": True,
         },
         {
             "id": 1,
@@ -584,6 +590,7 @@ async def test_full_audit_builds_confirmed_upgrade_path(
         _latest_version: str,
         _installed_version: str,
     ) -> tuple[list[dict[str, object]], str, int]:
+        assert _etag is None
         return releases, "etag-v3", 4998
 
     monkeypatch.setattr(manager, "_fetch_repository_metadata", fake_metadata)
@@ -603,6 +610,21 @@ async def test_full_audit_builds_confirmed_upgrade_path(
     assert update["upgrade_signal_counts"]["security_fixes"] == 1
     assert update["minimum_home_assistant_version"] == "2026.9"
     assert result["finding_counts"]["new"] == 1
+    assert update["stable_releases_behind"] == 1
+    assert update["prereleases_behind"] == 1
+    assert update["upgrade_releases"][0]["prerelease"] is True
+    assert update["summary_version"] == "v2.0.0"
+    assert update["summary"] == "Breaking change: remove the legacy option."
+
+    manager.data.update(result)
+    manager._publish()
+    await hass.async_block_till_done()
+    entity = AuditorFindingsTodo(manager, entry.entry_id)
+    description = entity.todo_items[0].description
+    assert description is not None
+    assert "v2.0.0: Breaking change: remove the legacy option." in description
+    assert "https://github.com/example/component/releases/tag/v2.0.0" in description
+    assert "https://github.com/example/component/releases/tag/v3.0.0" in description
 
 
 async def test_authenticated_release_search_stops_on_matching_page(

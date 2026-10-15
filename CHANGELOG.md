@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.7.0-beta.3
+
+- Prefer concrete risk excerpts over release introductions, including the
+  highest-severity intermediate release with its source version and URL.
+- Show the risk excerpt in native finding to-do items and bilingual cards.
+- Split confirmed path totals into stable and prerelease counts using GitHub
+  metadata, and label prerelease steps without dropping their risk evidence.
+- Refresh cached assessments while preserving finding IDs and review states.
+
 ## 1.7.0-beta.2
 
 - Stop treating generic critical/important vocabulary and token-security

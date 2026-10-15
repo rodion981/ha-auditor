@@ -13,7 +13,13 @@ MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
 UPDATE_SUFFIX_RE = re.compile(r"\s+update\s*$", re.IGNORECASE)
-CLASSIFICATION_VERSION = 6
+CLASSIFICATION_VERSION = 7
+SECTION_LABEL_RE = re.compile(
+    r"\W*(?:breaking(?: changes?)?|security(?: fixes| patches| updates)?"
+    r"|deprecations?|features?|bug fixes|what's changed)\W*",
+    re.IGNORECASE,
+)
+MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+")
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 MINIMUM_HOME_ASSISTANT_PATTERNS = (
     re.compile(
@@ -215,14 +221,45 @@ def classification_reason(
 
 
 def summarize_release(body: str) -> str:
-    """Return a compact, safe excerpt without pretending to translate it."""
+    """Prefer concrete risk evidence to introductions, without translating it."""
     text = MARKDOWN_LINK_RE.sub(r"\1", body)
     text = HTML_RE.sub(" ", text)
+    lines = [
+        (raw, SPACE_RE.sub(" ", MARKDOWN_RE.sub("", raw).strip(" -\t")))
+        for raw in text.splitlines()
+    ]
+    severity, _matched = classify_release_details(body)
+    if severity in {"critical", "important"}:
+        for index, (_raw, line) in enumerate(lines):
+            if classify_release(line) != severity:
+                continue
+            if SECTION_LABEL_RE.fullmatch(line):
+                # A bare heading is not evidence. Never cross the next section.
+                evidence: list[str] = []
+                for next_raw, next_line in lines[index + 1 :]:
+                    if MARKDOWN_HEADING_RE.match(next_raw) or (
+                        next_line and SECTION_LABEL_RE.fullmatch(next_line)
+                    ):
+                        break
+                    if len(next_line) >= 12 and not next_line.lower().startswith(
+                        "full changelog"
+                    ):
+                        evidence.append(next_line)
+                    if len(evidence) == 2:
+                        break
+                excerpt = "; ".join(evidence)
+            else:
+                excerpt = line
+            if excerpt:
+                return excerpt[:280].rstrip() + ("…" if len(excerpt) > 280 else "")
+
     candidates: list[str] = []
-    for raw_line in text.splitlines():
-        line = MARKDOWN_RE.sub("", raw_line).strip(" -\t")
-        line = SPACE_RE.sub(" ", line)
-        if len(line) >= 12 and not line.lower().startswith("full changelog"):
+    for _raw_line, line in lines:
+        if (
+            len(line) >= 12
+            and not line.lower().startswith("full changelog")
+            and not SECTION_LABEL_RE.fullmatch(line)
+        ):
             candidates.append(line)
         if len(candidates) == 2:
             break
@@ -392,6 +429,10 @@ def build_upgrade_path(
         "upgrade_path_status": "unavailable",
         "upgrade_path_complete": False,
         "versions_behind": None,
+        "stable_releases_behind": None,
+        "prereleases_behind": None,
+        "target_prerelease": None,
+        "installed_prerelease": None,
         "intermediate_release_count": None,
         "version_path": [value for value in (installed, latest) if value],
         "upgrade_releases": [],
@@ -399,6 +440,9 @@ def build_upgrade_path(
         "upgrade_signal_counts": {key: 0 for key in UPGRADE_SIGNAL_KEYS},
         "upgrade_severity": "unknown",
         "upgrade_matched_term": "",
+        "upgrade_summary": "",
+        "upgrade_summary_version": "",
+        "upgrade_summary_url": "",
         "minimum_home_assistant_version": "",
         "minimum_home_assistant_version_source": "",
         "compatibility_status": "unknown",
@@ -406,10 +450,12 @@ def build_upgrade_path(
     target_release = find_release_for_version(releases, latest)
     if target_release is None or target_release.get("source") == "tag":
         return base
+    base["target_prerelease"] = target_release.get("prerelease") is True
 
     installed_release = find_release_for_version(releases, installed)
     if installed_release is None:
         return {**base, "upgrade_path_status": "partial"}
+    base["installed_prerelease"] = installed_release.get("prerelease") is True
 
     target_index = releases.index(target_release)
     installed_index = releases.index(installed_release)
@@ -451,6 +497,7 @@ def build_upgrade_path(
                 "version": version,
                 "title": title,
                 "severity": severity,
+                "prerelease": release.get("prerelease") is True,
                 "signals": signals,
                 "summary": summarize_release(body),
                 "url": str(release.get("html_url") or ""),
@@ -467,11 +514,19 @@ def build_upgrade_path(
             details[-1],
         ]
     compatibility_status = "requirement_found" if minimum_ha_version else "unknown"
+    evidence = (
+        max(details, key=lambda item: _SEVERITY_ORDER[item["severity"]])
+        if upgrade_severity != "minor"
+        else details[-1]
+    )
+    prereleases = sum(item["prerelease"] for item in details)
     return {
         **base,
         "upgrade_path_status": "complete",
         "upgrade_path_complete": True,
         "versions_behind": len(path),
+        "stable_releases_behind": len(path) - prereleases,
+        "prereleases_behind": prereleases,
         "intermediate_release_count": max(len(path) - 1, 0),
         "version_path": [installed] + [item["version"] for item in display_details],
         "upgrade_releases": display_details,
@@ -479,6 +534,9 @@ def build_upgrade_path(
         "upgrade_signal_counts": signal_counts,
         "upgrade_severity": upgrade_severity,
         "upgrade_matched_term": upgrade_matched_term,
+        "upgrade_summary": evidence["summary"],
+        "upgrade_summary_version": evidence["version"],
+        "upgrade_summary_url": evidence["url"],
         "minimum_home_assistant_version": minimum_ha_version,
         "minimum_home_assistant_version_source": minimum_ha_source,
         "compatibility_status": compatibility_status,
@@ -499,6 +557,8 @@ def assess_available_update(
         "installed_version": str(repository.get("installed_version") or ""),
         "latest_version": latest_version,
         "classification_version": CLASSIFICATION_VERSION,
+        "summary_version": "",
+        "summary_url": "",
     }
     upgrade_path = build_upgrade_path(
         releases, base["installed_version"], base["latest_version"]
@@ -533,6 +593,12 @@ def assess_available_update(
             matched_term = str(upgrade_path["upgrade_matched_term"])
         reason = classification_reason(severity, matched_term, messages)
         summary = summarize_release(body)
+        base["summary_version"] = str(release.get("tag_name") or latest_version)
+        base["summary_url"] = str(release.get("html_url") or "")
+        if upgrade_path["upgrade_path_complete"] and upgrade_path["upgrade_summary"]:
+            summary = upgrade_path["upgrade_summary"]
+            base["summary_version"] = upgrade_path["upgrade_summary_version"]
+            base["summary_url"] = upgrade_path["upgrade_summary_url"]
         status_label = localize(messages, "release_status_found")
     return {
         **base,

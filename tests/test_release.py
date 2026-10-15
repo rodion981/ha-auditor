@@ -119,6 +119,115 @@ def test_summary_is_bounded() -> None:
 
 
 @pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (
+            "## What's Changed\nThanks to everyone who helped.\n"
+            "### ⚠️ Breaking Changes\n"
+            "- Sensors now show unavailable instead of unknown.\n"
+            "### Features\n- Added diagnostic details.",
+            "Sensors now show unavailable instead of unknown.",
+        ),
+        (
+            "Welcome to this maintenance release.\n"
+            "**Breaking changes**\n- Rename the old configuration key.\n"
+            "**Features**\n- More dashboard options.",
+            "Rename the old configuration key.",
+        ),
+        (
+            "Thanks for supporting the project.\n"
+            "Breaking change: remove the legacy configuration key.",
+            "Breaking change: remove the legacy configuration key.",
+        ),
+        (
+            "Thanks for supporting the project.\n"
+            "## Security fixes\n- Prevent unauthorized access to the API.\n"
+            "## Features\n- Added more configuration options.",
+            "Prevent unauthorized access to the API.",
+        ),
+        (
+            "This release has new options.\n"
+            "Fix CVE-2026-12345 in authentication handling.",
+            "Fix CVE-2026-12345 in authentication handling.",
+        ),
+        (
+            "Подяка всім учасникам проєкту.\n"
+            "Видалено підтримку старого формату конфігурації.",
+            "Видалено підтримку старого формату конфігурації.",
+        ),
+    ],
+)
+def test_summary_prioritizes_concrete_risk_evidence(body: str, expected: str) -> None:
+    assert release.summarize_release(body) == expected
+
+
+def test_summary_does_not_take_features_from_an_empty_breaking_section() -> None:
+    body = (
+        "## Breaking Changes\n## Features\n"
+        "- Added support for another device.\nNo breaking changes."
+    )
+    assert "Breaking Changes" not in release.summarize_release(body)
+
+
+@pytest.mark.parametrize("target_prerelease", [False, True])
+def test_path_marks_prereleases_from_github_metadata(target_prerelease: bool) -> None:
+    releases = [
+        {"tag_name": "3.7.2", "prerelease": target_prerelease, "body": "Bug fixes."},
+        {"tag_name": "3.7.1", "prerelease": True, "body": "Test release."},
+        {"tag_name": "3.7.0", "prerelease": False, "body": "Installed release."},
+    ]
+    path = release.build_upgrade_path(releases, "3.7.0", "3.7.2")
+
+    assert path["versions_behind"] == 2
+    assert path["prereleases_behind"] == 1 + target_prerelease
+    assert path["stable_releases_behind"] == 1 - target_prerelease
+    assert path["target_prerelease"] is target_prerelease
+    assert path["upgrade_releases"][0]["prerelease"] is True
+    assert path["upgrade_releases"][1]["prerelease"] is target_prerelease
+
+
+def test_truncated_path_keeps_hidden_risk_evidence_and_full_channel_counts() -> None:
+    releases = [
+        {
+            "tag_name": str(version),
+            "body": (
+                "Breaking change: rename the old configuration key."
+                if version == 35
+                else "Maintenance release."
+            ),
+            "prerelease": version == 35,
+            "html_url": f"https://example.test/{version}",
+        }
+        for version in reversed(range(41))
+    ]
+    assessment = release.assess_available_update(
+        {"installed_version": "0", "latest_version": "40"}, releases, MESSAGES
+    )
+
+    assert assessment["upgrade_path_truncated"] is True
+    assert len(assessment["upgrade_releases"]) == release.UPGRADE_PATH_DISPLAY_LIMIT
+    assert "35" not in assessment["version_path"]
+    assert assessment["versions_behind"] == 40
+    assert assessment["stable_releases_behind"] == 39
+    assert assessment["prereleases_behind"] == 1
+    assert assessment["summary"].startswith("Breaking change:")
+    assert assessment["summary_version"] == "35"
+    assert assessment["summary_url"] == "https://example.test/35"
+
+
+def test_tag_only_path_keeps_channel_counts_unknown() -> None:
+    tags = release.tags_as_release_candidates("owner/component", [{"name": "v2"}])
+    assessment = release.assess_available_update(
+        {"installed_version": "v1", "latest_version": "v2"}, tags, MESSAGES
+    )
+    assert assessment["prereleases_behind"] is None
+    assert assessment["stable_releases_behind"] is None
+    assert assessment["target_prerelease"] is None
+    assert assessment["summary"] == ""
+    assert assessment["summary_url"] == ""
+
+
+@pytest.mark.parametrize(
     ("tag", "version"),
     [
         ("v1.2.3", "1.2.3"),
@@ -308,6 +417,9 @@ def test_complete_upgrade_path_aggregates_intermediate_release_risks() -> None:
         "v3.0.0",
     ]
     assert assessment["severity"] == "critical"
+    assert assessment["summary"].startswith("Breaking change: migration required.")
+    assert assessment["summary_version"] == "v1.5.0"
+    assert assessment["summary_url"] == "https://example.test/v1.5.0"
     assert assessment["upgrade_signal_counts"] == {
         "breaking_changes": 1,
         "security_fixes": 1,
@@ -340,6 +452,10 @@ def test_upgrade_path_is_partial_when_installed_release_is_not_found() -> None:
     assert assessment["upgrade_path_complete"] is False
     assert assessment["versions_behind"] is None
     assert assessment["intermediate_release_count"] is None
+    assert assessment["stable_releases_behind"] is None
+    assert assessment["prereleases_behind"] is None
+    assert assessment["summary_version"] == "v2.0.0"
+    assert assessment["summary"] == "Security fix."
     assert assessment["compatibility_status"] == "unknown"
 
 

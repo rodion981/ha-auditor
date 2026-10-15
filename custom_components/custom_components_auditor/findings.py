@@ -58,6 +58,8 @@ def build_finding_candidates(
                 "latest_version": latest_version,
                 "reason": str(update.get("reason") or ""),
                 "summary": str(update.get("summary") or ""),
+                "summary_version": str(update.get("summary_version") or ""),
+                "summary_url": str(update.get("summary_url") or ""),
                 "url": str(update.get("url") or ""),
             }
         )

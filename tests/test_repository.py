@@ -11,6 +11,7 @@ from string import Formatter
 
 import pytest
 import yaml
+from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).parents[1]
 INTEGRATION = ROOT / "custom_components" / "custom_components_auditor"
@@ -30,7 +31,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.7.0-beta.2"
+    assert manifest["version"] == "1.7.0-beta.3"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -315,6 +316,65 @@ def test_dashboard_handles_optional_finding_fields_and_uses_compact_action() -> 
         "hide_completed": False,
         "item_tap_action": "toggle",
     }
+
+
+@pytest.mark.parametrize("language", ["", ".uk"])
+@pytest.mark.parametrize("path_status", ["complete", "partial", "legacy", "empty"])
+def test_dashboard_renders_evidence_and_prereleases_with_optional_fields(
+    language: str, path_status: str
+) -> None:
+    dashboard = yaml.safe_load(
+        (ROOT / "examples" / f"dashboard{language}.yaml").read_text(encoding="utf-8")
+    )
+    update = {
+        "component": "Example component",
+        "installed_version": "1.0.0",
+        "latest_version": "2.0.0",
+        "target_prerelease": True,
+        "installed_prerelease": True,
+        "upgrade_path_complete": path_status == "complete",
+        "versions_behind": 2,
+        "stable_releases_behind": 0,
+        "prereleases_behind": 2,
+        "upgrade_path_truncated": True,
+        "upgrade_releases": [
+            {"version": "1.5.0", "prerelease": True},
+            {"version": "2.0.0", "prerelease": True},
+        ],
+    }
+    finding = {
+        "component": "Example component",
+        "summary": "Rename the old configuration key.",
+        "summary_version": "1.5.0",
+        "summary_url": "https://example.test/1.5.0",
+    }
+    if path_status == "legacy":
+        update = {"upgrade_path_complete": True}
+        finding = {}
+
+    attributes = {
+        "available_updates": [] if path_status == "empty" else [update],
+        "active_findings": [] if path_status == "empty" else [finding],
+    }
+    rendered = (
+        Environment(undefined=StrictUndefined)
+        .from_string(dashboard["cards"][0]["content"])
+        .render(
+            state_attr=lambda _entity, attribute: attributes.get(attribute),
+            states=lambda _entity: "unknown",
+        )
+    )
+
+    assert "Undefined" not in rendered
+    if path_status not in {"legacy", "empty"}:
+        assert "Rename the old configuration key." in rendered
+        assert "https://example.test/1.5.0" in rendered
+    if path_status == "complete":
+        assert "`1.5.0`" in rendered
+        assert "попередній" in rendered if language else "prerelease" in rendered
+    if path_status == "partial":
+        assert "невідома" in rendered if language else "unknown" in rendered
+        assert "`1.5.0`" not in rendered
 
 
 def test_public_tree_does_not_contain_known_private_values_or_tokens() -> None:
