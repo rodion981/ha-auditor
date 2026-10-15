@@ -147,7 +147,10 @@ confirmed passes from the failed concrete-excerpt acceptance check.
 - [x] Verify actual public HACS 2.0.0 notes locally, preserving their source.
 - [x] Pass 166 Linux/HA tests with 79.99% coverage and 147 Windows tests.
 - [x] Owner approves publishing beta.4 and checking it on test HAOS.
-- [ ] Verify green main and exact beta.4 tag CI and publish through Git/CLI.
-- [ ] Install beta.4 through HACS, restart Core and verify seven entities.
-- [ ] Repeat the HACS path scenario and verify the concrete native to-do excerpt.
-- [ ] Restore fixtures/settings and confirm ordinary audits without errors.
+- [x] Verify green main and exact beta.4 tag CI and publish through Git/CLI.
+- [x] Install beta.4 through HACS, restart Core and verify seven entities.
+- [x] Repeat the HACS path scenario and verify the concrete native to-do excerpt.
+- [x] Restore fixtures/settings and confirm ordinary audits without errors.
+
+See [the beta.4 live report](docs/validation/v1.7.0-beta.4-live.md) for the
+passing risk-excerpt regression, two clean ordinary audits and evidence limits.
