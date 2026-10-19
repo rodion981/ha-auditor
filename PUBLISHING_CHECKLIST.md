@@ -164,8 +164,8 @@ passing risk-excerpt regression, two clean ordinary audits and evidence limits.
 - [x] Pass 192 Linux/HA tests at 80.39% coverage and 169 Windows tests.
 - [x] Pass Ruff, formatting and 12/120-update sensor/card regressions.
 - [x] Owner explicitly approves publication of the next beta through Git/CLI.
-- [ ] Verify green main and exact beta.5 tag CI.
-- [ ] Publish beta.5 through Git/CLI and verify the tagged HACS package.
+- [x] Verify green main and exact beta.5 tag CI.
+- [x] Publish beta.5 through Git/CLI and verify the tagged HACS package.
 - [ ] Install beta.5 and verify all twelve update details and corrected HA requirement.
 
 The original beta.4 audit is recorded in
