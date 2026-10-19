@@ -1455,7 +1455,7 @@ class ComponentsAuditor:
         return localized
 
     def state_attributes(self) -> dict[str, Any]:
-        """Return bounded attributes for the public audit sensor."""
+        """Return all available updates, keeping unrelated detail lists bounded."""
         counts = self.data.get("counts", {})
         return {
             "status": self.data.get("status", "idle"),
@@ -1480,7 +1480,7 @@ class ComponentsAuditor:
             "updates_available": self.data.get("updates_available", 0),
             "available_updates": [
                 self._with_localized_reason(item)
-                for item in self.data.get("available_updates", [])[:10]
+                for item in self.data.get("available_updates", [])
             ],
             "available_update_counts": self.data.get("available_update_counts", {}),
             "upgrade_path_counts": self.data.get("upgrade_path_counts", {}),

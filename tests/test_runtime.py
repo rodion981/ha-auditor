@@ -499,8 +499,11 @@ async def test_diagnostics_exclude_private_values(hass: HomeAssistant) -> None:
     assert "private-owner/private-repository" not in serialized
 
 
+@pytest.mark.parametrize("feature_requirement", [False, True])
 async def test_full_audit_builds_confirmed_upgrade_path(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    feature_requirement: bool,
 ) -> None:
     """Exercise the complete manager pipeline for one multi-release update."""
     entry = await _setup_entry(hass)
@@ -525,7 +528,9 @@ async def test_full_audit_builds_confirmed_upgrade_path(
             "available_update": {
                 "installed_version": "1.0.0",
                 "latest_version": "3.0.0",
-                "classification_version": 7,
+                "classification_version": 8,
+                "minimum_home_assistant_version": "2026.10",
+                "compatibility_status": "requirement_found",
             },
         }
     }
@@ -553,7 +558,12 @@ async def test_full_audit_builds_confirmed_upgrade_path(
             "id": 3,
             "tag_name": "v3.0.0",
             "name": "Version 3",
-            "body": "Requires Home Assistant 2026.9 or newer. Security fix.",
+            "body": (
+                "## Features\n- Optional MapTiles mode requires Home Assistant "
+                "2026.10 or newer.\n\nSecurity fix."
+                if feature_requirement
+                else "Requires Home Assistant 2026.9 or newer. Security fix."
+            ),
             "published_at": "2026-09-20T00:00:00Z",
             "html_url": "https://github.com/example/component/releases/tag/v3.0.0",
             "source": "release",
@@ -612,7 +622,15 @@ async def test_full_audit_builds_confirmed_upgrade_path(
     assert update["version_path"] == ["1.0.0", "v2.0.0", "v3.0.0"]
     assert update["upgrade_signal_counts"]["breaking_changes"] == 1
     assert update["upgrade_signal_counts"]["security_fixes"] == 1
-    assert update["minimum_home_assistant_version"] == "2026.9"
+    assert update["minimum_home_assistant_version"] == (
+        "" if feature_requirement else "2026.9"
+    )
+    assert update["compatibility_status"] == (
+        "unknown" if feature_requirement else "requirement_found"
+    )
+    assert update["minimum_home_assistant_version_source"] == (
+        "" if feature_requirement else releases[0]["html_url"]
+    )
     assert result["finding_counts"]["new"] == 1
     assert update["stable_releases_behind"] == 1
     assert update["prereleases_behind"] == 1
@@ -631,6 +649,39 @@ async def test_full_audit_builds_confirmed_upgrade_path(
     assert "unrelated chart" not in description
     assert "https://github.com/example/component/releases/tag/v2.0.0" in description
     assert "https://github.com/example/component/releases/tag/v3.0.0" in description
+
+
+@pytest.mark.parametrize("count", [0, 12, 120])
+async def test_sensor_exposes_every_assessed_update(
+    hass: HomeAssistant, count: int
+) -> None:
+    """Do not lose updates beyond ten or re-enable Recorder payload history."""
+    entry = await _setup_entry(hass)
+    manager = entry.runtime_data
+    updates = [
+        {
+            "repository": f"example/component-{index}",
+            "entity_id": f"update.component_{index}",
+            "installed_version": "1.0.0",
+            "latest_version": "2.0.0",
+            "severity": "minor",
+            "release_status": "found",
+        }
+        for index in range(count)
+    ]
+    manager.data.update(updates_available=count, available_updates=updates)
+    manager._publish()
+    await hass.async_block_till_done()
+    state = hass.states.get("sensor.custom_components_auditor")
+    assert state is not None
+    assert state.attributes["updates_available"] == count
+    exposed = state.attributes["available_updates"]
+    assert len(exposed) == count
+    assert [item["entity_id"] for item in exposed] == [
+        item["entity_id"] for item in updates
+    ]
+    assert manager.data["available_updates"] == updates
+    assert AuditorEntity._unrecorded_attributes == frozenset({MATCH_ALL})
 
 
 async def test_authenticated_release_search_stops_on_matching_page(

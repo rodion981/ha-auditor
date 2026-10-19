@@ -253,8 +253,15 @@ Incomplete paths keep counts unknown rather than reporting zero.
 If the installed boundary is outside the bounded lookup or has no matching
 GitHub Release, the path is `partial`; counts remain unknown instead of being
 estimated. `minimum_home_assistant_version` is populated only when release notes
-state a requirement explicitly. Otherwise `compatibility_status` stays
-`unknown`.
+state an unconditional requirement for the integration as a whole. A requirement
+for an optional feature, a conditional statement or an unclear scope does not
+establish that global minimum; `compatibility_status` stays `unknown` when no
+explicit global requirement is found. This conservative extraction does not
+prove compatibility with the running Home Assistant version.
+
+`available_updates` and both example cards include every assessed available
+update, not only the first ten. Per-path release-detail bounds still apply,
+and detailed sensor attributes remain excluded from Recorder history.
 
 If a repository has no GitHub Releases, HA Auditor falls back to its latest
 GitHub Tags. A matched tag is reported as the source, without inventing release

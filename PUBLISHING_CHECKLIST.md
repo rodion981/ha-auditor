@@ -154,3 +154,20 @@ confirmed passes from the failed concrete-excerpt acceptance check.
 
 See [the beta.4 live report](docs/validation/v1.7.0-beta.4-live.md) for the
 passing risk-excerpt regression, two clean ordinary audits and evidence limits.
+
+## v1.7.0-beta.5 regression gate
+
+- [x] Expose every assessed update in the sensor and bilingual example cards.
+- [x] Preserve Recorder exclusions and bounded individual path details.
+- [x] Reject feature-scoped/conditional global HA minimums; preserve explicit ones.
+- [x] Refresh cached assessments with rules 9, preserving finding IDs/review states.
+- [x] Pass 192 Linux/HA tests at 80.39% coverage and 169 Windows tests.
+- [x] Pass Ruff, formatting and 12/120-update sensor/card regressions.
+- [x] Owner explicitly approves publication of the next beta through Git/CLI.
+- [ ] Verify green main and exact beta.5 tag CI.
+- [ ] Publish beta.5 through Git/CLI and verify the tagged HACS package.
+- [ ] Install beta.5 and verify all twelve update details and corrected HA requirement.
+
+The original beta.4 audit is recorded in
+[the accumulated-update report](docs/validation/v1.7.0-beta.4-backlog-audit-2026-10-19.md).
+Local regression proof does not close the installed live-validation gate.

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.7.0-beta.5
+
+- Expose every assessed available update in the sensor and both example cards,
+  instead of silently hiding entries after the tenth; Recorder exclusions stay
+  unchanged.
+- Do not promote optional-feature or conditional Home Assistant requirements
+  into an integration-wide minimum. Keep ambiguous compatibility unknown and
+  preserve explicitly global requirements and their release source.
+- Refresh existing assessments with rules version 9, without changing finding
+  IDs, review states or the storage schema.
+
 ## 1.7.0-beta.4
 
 - Prefer dedicated risk sections over introductory risk sentences; extract

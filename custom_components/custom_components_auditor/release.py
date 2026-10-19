@@ -13,7 +13,7 @@ MARKDOWN_RE = re.compile(r"[`*_>#|~]+")
 HTML_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
 UPDATE_SUFFIX_RE = re.compile(r"\s+update\s*$", re.IGNORECASE)
-CLASSIFICATION_VERSION = 8
+CLASSIFICATION_VERSION = 9
 SECTION_LABEL_RE = re.compile(
     r"\W*(?:breaking(?: changes?)?|security(?: fixes| patches| updates)?"
     r"|deprecations?|features?|bug fixes|what's changed)\W*",
@@ -40,6 +40,32 @@ MINIMUM_HOME_ASSISTANT_PATTERNS = (
         r"(?:or newer|or later|\+|minimum|required)\b",
         re.IGNORECASE,
     ),
+)
+GLOBAL_REQUIREMENT_SUBJECT_RE = re.compile(
+    r"(?:(?:this|the)\s+)?(?:integration|component|card|release|update)"
+    r"(?:\s+now)?\s*",
+    re.IGNORECASE,
+)
+GLOBAL_REQUIREMENT_HEADINGS = {
+    "requirements",
+    "minimum requirements",
+    "minimum home assistant version",
+    "minimum supported home assistant version",
+    "home assistant requirements",
+    "compatibility",
+    "installation",
+    "dependencies",
+    "breaking changes",
+    "breaking change",
+    "changes",
+    "whats changed",
+    "release notes",
+}
+FEATURE_REQUIREMENT_CONTEXT_RE = re.compile(
+    r"`|\b(?:optional|feature|mode)\b", re.IGNORECASE
+)
+CONDITIONAL_REQUIREMENT_RE = re.compile(
+    r"\b(?:for|when|if|only|unless|optional|feature|mode)\b", re.IGNORECASE
 )
 UPGRADE_PATH_DISPLAY_LIMIT = 30
 UPGRADE_SIGNAL_KEYS = (
@@ -194,12 +220,39 @@ def release_signals(text: str) -> list[str]:
 
 
 def extract_minimum_home_assistant_version(text: str) -> str:
-    """Extract an explicitly stated minimum Home Assistant version."""
-    versions = {
-        match.group(1)
-        for pattern in MINIMUM_HOME_ASSISTANT_PATTERNS
-        for match in pattern.finditer(text)
-    }
+    """Extract only an explicitly global, unconditional HA requirement."""
+    versions: set[str] = set()
+    global_heading = True
+    paragraph = ""
+    for line in text.splitlines():
+        if MARKDOWN_HEADING_RE.match(line) and not any(
+            pattern.search(line) for pattern in MINIMUM_HOME_ASSISTANT_PATTERNS
+        ):
+            heading = SPACE_RE.sub(" ", re.sub(r"[^a-z ]", "", line.lower())).strip()
+            global_heading = heading in GLOBAL_REQUIREMENT_HEADINGS
+            paragraph = ""
+            continue
+        if not line.strip():
+            paragraph = ""
+            continue
+        for pattern in MINIMUM_HOME_ASSISTANT_PATTERNS:
+            for match in pattern.finditer(line):
+                prefix = line[: match.start()]
+                clause = re.split(r"[.!?;]\s+", prefix)[-1]
+                subject = MARKDOWN_RE.sub("", clause).strip(" \t-+\u2022:")
+                explicit_global = bool(GLOBAL_REQUIREMENT_SUBJECT_RE.fullmatch(subject))
+                if subject and not explicit_global:
+                    continue
+                if not explicit_global and (
+                    not global_heading
+                    or FEATURE_REQUIREMENT_CONTEXT_RE.search(paragraph + prefix)
+                ):
+                    continue
+                suffix = re.split(r"[.!?;]\s*", line[match.end() :], maxsplit=1)[0]
+                if CONDITIONAL_REQUIREMENT_RE.search(suffix):
+                    continue
+                versions.add(match.group(1))
+        paragraph += line + "\n"
     if not versions:
         return ""
     return max(

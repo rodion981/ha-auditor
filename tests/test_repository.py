@@ -31,7 +31,7 @@ def test_manifest_is_valid_for_custom_integration() -> None:
 
     assert manifest["domain"] == "custom_components_auditor"
     assert manifest["name"] == "HA Auditor"
-    assert manifest["version"] == "1.7.0-beta.4"
+    assert manifest["version"] == "1.7.0-beta.5"
     assert manifest["integration_type"] == "service"
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["config_flow"] is True
@@ -375,6 +375,34 @@ def test_dashboard_renders_evidence_and_prereleases_with_optional_fields(
     if path_status == "partial":
         assert "невідома" in rendered if language else "unknown" in rendered
         assert "`1.5.0`" not in rendered
+
+
+@pytest.mark.parametrize("language", ["", ".uk"])
+@pytest.mark.parametrize("count", [12, 120])
+def test_dashboard_renders_all_available_updates(language: str, count: int) -> None:
+    dashboard = yaml.safe_load(
+        (ROOT / "examples" / f"dashboard{language}.yaml").read_text(encoding="utf-8")
+    )
+    updates = [
+        {
+            "component": f"Backlog component {index:03d}",
+            "installed_version": "1.0.0",
+            "latest_version": "2.0.0",
+        }
+        for index in range(count)
+    ]
+    rendered = (
+        Environment(undefined=StrictUndefined)
+        .from_string(dashboard["cards"][0]["content"])
+        .render(
+            state_attr=lambda _entity, attr: (
+                updates if attr == "available_updates" else None
+            ),
+            states=lambda _entity: "unknown",
+        )
+    )
+    for update in updates:
+        assert update["component"] in rendered
 
 
 def test_public_tree_does_not_contain_known_private_values_or_tokens() -> None:

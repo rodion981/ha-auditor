@@ -50,7 +50,7 @@ cards:
 
       {% if updates %}
       ### Available updates and release paths
-      {% for update in updates[:10] %}
+      {% for update in updates %}
       - **{{ update.get('component') or update.get('repository') }}:** `{{ update.get('installed_version') or '?' }}` → `{{ update.get('latest_version') or '?' }}`{% if update.get('target_prerelease') %} _(prerelease)_{% endif %}
         {% if update.get('upgrade_path_complete') %}
         {% if update.get('stable_releases_behind') is not none and update.get('prereleases_behind') is not none %}Releases in path: {{ update.get('versions_behind') }} · stable: {{ update.get('stable_releases_behind') }} · prerelease: {{ update.get('prereleases_behind') }}.{% endif %}

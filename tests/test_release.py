@@ -598,6 +598,66 @@ def test_minimum_home_assistant_version_requires_explicit_wording() -> None:
     assert release.extract_minimum_home_assistant_version("Tested on 2026.9") == ""
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "- **`map_style: MapTiles`** proxies map tiles through Home Assistant. "
+        "Requires Home Assistant 2026.10+; the editor greys out the option on "
+        "older cores, and YAML falls back to Light if set anyway.",
+        "- **Optional MapTiles mode**\n  Requires Home Assistant 2026.10 or newer.",
+        "## MapTiles\nRequires Home Assistant 2026.10 or newer.",
+        "## Features\n- Requires Home Assistant 2026.10 for the new map mode.",
+        "Requires Home Assistant 2026.10 or newer for the optional map mode.",
+        "No longer requires Home Assistant 2026.10 or newer.",
+        "If using MapTiles, Home Assistant 2026.10 or later is required.",
+    ],
+)
+def test_feature_requirements_are_not_global_minimums(text: str) -> None:
+    assert release.extract_minimum_home_assistant_version(text) == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Requires Home Assistant 2026.9 or newer.",
+        "## Requirements\n- Requires Home Assistant 2026.9 or newer.",
+        "## What's Changed\nRequires Home Assistant 2026.9 or newer.",
+        "This integration now requires Home Assistant 2026.9 or newer.",
+        "## Features\nThis integration requires Home Assistant 2026.9 or newer.",
+        "Security fix and deprecated option cleanup. "
+        "Requires Home Assistant 2026.9 or newer.",
+        "Minimum Home Assistant version: 2026.9.",
+        "Home Assistant 2026.9 or later is required.",
+        "## Requires Home Assistant 2026.9 or newer.",
+        "## Minimum supported Home Assistant version\n"
+        "Requires Home Assistant 2026.9 or newer.",
+    ],
+)
+def test_explicit_global_requirements_remain_supported(text: str) -> None:
+    assert release.extract_minimum_home_assistant_version(text) == "2026.9"
+
+
+def test_feature_requirement_does_not_raise_confirmed_global_minimum() -> None:
+    releases = [
+        {
+            "tag_name": "v3.0.0",
+            "body": "## Features\n- Optional MapTiles mode requires "
+            "Home Assistant 2026.10 or newer.",
+            "html_url": "https://example.test/v3.0.0",
+        },
+        {
+            "tag_name": "v2.0.0",
+            "body": "Requires Home Assistant 2026.8 or newer.",
+            "html_url": "https://example.test/v2.0.0",
+        },
+        {"tag_name": "v1.0.0", "body": "Installed version."},
+    ]
+    path = release.build_upgrade_path(releases, "1.0.0", "3.0.0")
+    assert path["minimum_home_assistant_version"] == "2026.8"
+    assert path["minimum_home_assistant_version_source"].endswith("v2.0.0")
+    assert path["compatibility_status"] == "requirement_found"
+
+
 def test_available_update_reports_missing_matching_release() -> None:
     repository = {
         "repository": "owner/component",

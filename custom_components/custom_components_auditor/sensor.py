@@ -45,7 +45,7 @@ class AuditorResultSensor(AuditorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the bounded actionable audit details."""
+        """Return actionable audit details, including every available update."""
         return self.manager.state_attributes()
 
 
